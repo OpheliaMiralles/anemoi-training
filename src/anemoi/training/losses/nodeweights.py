@@ -60,7 +60,7 @@ class GraphNodeAttribute:
         torch.Tensor
             area weights of the target nodes
         """
-        return AreaWeights(norm="unit-max", fill_value=0).compute(graph_data, self.target)
+        return AreaWeights(flat=True, norm="unit-max").compute(graph_data, self.target)
 
     def weights(self, graph_data: HeteroData) -> torch.Tensor:
         """Returns weight of type self.node_attribute for nodes self.target.
