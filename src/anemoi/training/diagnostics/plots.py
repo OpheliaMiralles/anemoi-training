@@ -782,8 +782,8 @@ def single_plot(
 
     xmin, xmax = max(lon.min(), -np.pi), min(lon.max(), np.pi)
     ymin, ymax = max(lat.min(), -np.pi / 2), min(lat.max(), np.pi / 2)
-    ax.set_xlim((xmin - 0.1, xmax + 0.1))
-    ax.set_ylim((ymin - 0.1, ymax + 0.1))
+    ax.set_xlim((xmin - 0.01, xmax + 0.01))
+    ax.set_ylim((ymin - 0.01, ymax + 0.01))
 
     continents.plot_continents(ax)
 
@@ -861,8 +861,8 @@ def edge_plot(
 
     xmin, xmax = edge_lines[:, 0, 0].min(), edge_lines[:, 0, 0].max()
     ymin, ymax = edge_lines[:, 1, 1].min(), edge_lines[:, 1, 1].max()
-    ax.set_xlim((xmin - 0.1, xmax + 0.1))
-    ax.set_ylim((ymin - 0.1, ymax + 0.1))
+    ax.set_xlim((xmin - 0.01, xmax + 0.01))
+    ax.set_ylim((ymin - 0.01, ymax + 0.01))
 
     continents.plot_continents(ax)
 
