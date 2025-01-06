@@ -13,7 +13,8 @@ import logging
 from functools import cached_property
 from typing import TYPE_CHECKING
 from typing import Callable
-
+import numpy as np
+import os
 import pytorch_lightning as pl
 from anemoi.datasets.data import open_dataset
 from anemoi.models.data_indices.collection import IndexCollection
@@ -49,14 +50,35 @@ class AnemoiDatasetsDataModule(pl.LightningDataModule):
         super().__init__()
 
         self.config = config
+
+        self.global_rank = int(os.environ.get("SLURM_PROCID",
+                                              "0"))  # global rank
+        self.model_comm_group_id = (
+            self.global_rank // self.config.hardware.num_gpus_per_model
+        )  # id of the model communication group the rank is participating in
+        self.model_comm_group_rank = (
+            self.global_rank % self.config.hardware.num_gpus_per_model
+        )  # rank within one model communication group
+        total_gpus = self.config.hardware.num_gpus_per_node * self.config.hardware.num_nodes
+        assert (total_gpus) % self.config.hardware.num_gpus_per_model == 0, (
+            f"GPUs per model {self.config.hardware.num_gpus_per_model} does not divide total GPUs {total_gpus}"
+        )
+        self.model_comm_num_groups = (self.config.hardware.num_gpus_per_node *
+                                      self.config.hardware.num_nodes //
+                                      self.config.hardware.num_gpus_per_model
+                                      )  # number of model communication groups
+        LOGGER.debug(
+            "Rank %d model communication group number %d, with local model communication group rank %d",
+            self.global_rank,
+            self.model_comm_group_id,
+            self.model_comm_group_rank,
+        )
         self.graph_data = graph_data
 
         # Set the maximum rollout to be expected
-        self.rollout = (
-            self.config.training.rollout.max
-            if self.config.training.rollout.epoch_increment > 0
-            else self.config.training.rollout.start
-        )
+        self.rollout = (self.config.training.rollout.max
+                        if self.config.training.rollout.epoch_increment > 0
+                        else self.config.training.rollout.start)
 
         # Set the training end date if not specified
         if self.config.dataloader.training.end is None:
@@ -86,9 +108,54 @@ class AnemoiDatasetsDataModule(pl.LightningDataModule):
         return IndexCollection(self.config, self.ds_train.name_to_index)
 
     @cached_property
+    def relative_date_indices(self) -> list:
+        """Determine a list of relative time indices to load for each batch"""
+        if hasattr(self.config.training, "explicit_times"):
+            return sorted(
+                set(self.config.training.explicit_times.input +
+                    self.config.training.explicit_times.target))
+
+        else:  #uses the old default of multistep, timeincrement and rollout.
+            # Use the maximum rollout to be expected
+            rollout = (
+                self.config.training.rollout.max
+                if self.config.training.rollout.epoch_increment > 0 else
+                self.config.training.rollout.start
+            )  #NOTE: --> for gradual rollout, max rollout dates is always fetched. But this was always the case in datamodule.py
+
+            multi_step = self.config.training.multistep_input
+            return [
+                self.timeincrement * mstep
+                for mstep in range(multi_step + rollout)
+            ]
+
+    def add_model_run_ids(self, data_reader):
+        """Determine the model run id of each time index of the data and add to a data_reader object
+        NOTE/TODO: This is only relevant when training on non-analysis and should be replaced with
+        a property of the dataset stored in data_reader.
+        Until then, assumes regular interval of changed model runs
+        """
+        if not hasattr(self.config.dataloader, "model_run_info"):
+            data_reader.model_run_ids = None
+            return data_reader
+
+        mr_start = np.datetime64(self.config.dataloader.model_run_info.start)
+        mr_len = self.config.dataloader.model_run_info.length  # model run length in number of date indices
+        assert max(
+            self.relative_date_indices
+        ) <= mr_len, f"Requested data length {max(self.relative_date_indices)} longer than model run length {mr_len}"
+
+        data_reader.model_run_ids = (
+            data_reader.dates - mr_start) // np.timedelta64(
+                mr_len * frequency_to_seconds(self.config.data.frequency), 's')
+        return data_reader
+
+    @cached_property
     def grid_indices(self) -> type[BaseGridIndices]:
-        reader_group_size = self.config.dataloader.get("read_group_size", self.config.hardware.num_gpus_per_model)
-        grid_indices = instantiate(self.config.dataloader.grid_indices, reader_group_size=reader_group_size)
+        reader_group_size = self.config.dataloader.get(
+            "read_group_size", self.config.hardware.num_gpus_per_model)
+        grid_indices = instantiate(self.config.dataloader.grid_indices,
+                                   reader_group_size=reader_group_size)
         grid_indices.setup(self.graph_data)
         return grid_indices
 
@@ -123,13 +190,16 @@ class AnemoiDatasetsDataModule(pl.LightningDataModule):
     @cached_property
     def ds_train(self) -> NativeGridDataset:
         return self._get_dataset(
-            open_dataset(OmegaConf.to_container(self.config.dataloader.training, resolve=True)),
+            open_dataset(
+                OmegaConf.to_container(self.config.dataloader.training,
+                                       resolve=True)),
             label="train",
         )
 
     @cached_property
     def ds_valid(self) -> NativeGridDataset:
-        r = max(self.rollout, self.config.dataloader.get("validation_rollout", 1))
+        r = max(self.rollout,
+                self.config.dataloader.get("validation_rollout", 1))
 
         if not self.config.dataloader.training.end < self.config.dataloader.validation.start:
             LOGGER.warning(
@@ -138,9 +208,11 @@ class AnemoiDatasetsDataModule(pl.LightningDataModule):
                 self.config.dataloader.validation.start,
             )
         return self._get_dataset(
-            open_dataset(OmegaConf.to_container(self.config.dataloader.validation, resolve=True)),
+            open_dataset(
+                OmegaConf.to_container(self.config.dataloader.validation,
+                                       resolve=True)),
             shuffle=False,
-            rollout=r,
+            #rollout=r, #NOTE: see the above
             label="validation",
         )
 
@@ -148,14 +220,14 @@ class AnemoiDatasetsDataModule(pl.LightningDataModule):
     def ds_test(self) -> NativeGridDataset:
         assert self.config.dataloader.training.end < self.config.dataloader.test.start, (
             f"Training end date {self.config.dataloader.training.end} is not before"
-            f"test start date {self.config.dataloader.test.start}"
-        )
+            f"test start date {self.config.dataloader.test.start}")
         assert self.config.dataloader.validation.end < self.config.dataloader.test.start, (
             f"Validation end date {self.config.dataloader.validation.end} is not before"
-            f"test start date {self.config.dataloader.test.start}"
-        )
+            f"test start date {self.config.dataloader.test.start}")
         return self._get_dataset(
-            open_dataset(OmegaConf.to_container(self.config.dataloader.test, resolve=True)),
+            open_dataset(
+                OmegaConf.to_container(self.config.dataloader.test,
+                                       resolve=True)),
             shuffle=False,
             label="test",
         )
@@ -164,12 +236,9 @@ class AnemoiDatasetsDataModule(pl.LightningDataModule):
         self,
         data_reader: Callable,
         shuffle: bool = True,
-        rollout: int = 1,
         label: str = "generic",
     ) -> NativeGridDataset:
-
-        r = max(rollout, self.rollout)
-
+        data_reader = self.add_model_run_ids(data_reader)  # NOTE: Temporary
         # Compute effective batch size
         effective_bs = (
             self.config.dataloader.batch_size["training"]
@@ -178,16 +247,15 @@ class AnemoiDatasetsDataModule(pl.LightningDataModule):
             // self.config.hardware.num_gpus_per_model
         )
 
-        return NativeGridDataset(
+        data = NativeGridDataset(
             data_reader=data_reader,
-            rollout=r,
-            multistep=self.config.training.multistep_input,
-            timeincrement=self.timeincrement,
+            relative_date_indices=self.relative_date_indices,
             shuffle=shuffle,
             grid_indices=self.grid_indices,
             label=label,
             effective_bs=effective_bs,
         )
+        return data
 
     def _get_dataloader(self, ds: NativeGridDataset, stage: str) -> DataLoader:
         assert stage in {"training", "validation", "test"}

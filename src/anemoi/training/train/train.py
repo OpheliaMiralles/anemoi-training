@@ -15,6 +15,7 @@ import logging
 from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING
+import importlib
 
 import hydra
 import numpy as np
@@ -142,7 +143,7 @@ class AnemoiTrainer:
         )
 
     @cached_property
-    def model(self) -> GraphForecaster:
+    def model(self) -> pl.LightningModule:
         """Provide the model instance."""
         kwargs = {
             "config": self.config,
@@ -152,9 +153,9 @@ class AnemoiTrainer:
             "statistics": self.datamodule.statistics,
             "supporting_arrays": self.supporting_arrays,
         }
-
-        model = GraphForecaster(**kwargs)
-
+        train_module = importlib.import_module(getattr(self.config.training, "train_module", "anemoi.training.train.forecaster"))
+        train_func = getattr(train_module, getattr(self.config.training, "train_function", "GraphForecaster"))
+        #NOTE: instantiate would be preferable, but I run into issues with "config" being the first kwarg of instantiate itself.
         if self.load_weights_only:
             # Sanify the checkpoint for transfer learning
             if self.config.training.transfer_learning:
@@ -162,11 +163,8 @@ class AnemoiTrainer:
                 return transfer_learning_loading(model, self.last_checkpoint)
 
             LOGGER.info("Restoring only model weights from %s", self.last_checkpoint)
-
-            return GraphForecaster.load_from_checkpoint(self.last_checkpoint, **kwargs, strict=False)
-
-        LOGGER.info("Model initialised from scratch.")
-        return model
+            return train_func.load_from_checkpoint(self.last_checkpoint, **kwargs)
+        return train_func(**kwargs)
 
     @rank_zero_only
     def _get_mlflow_run_id(self) -> str:

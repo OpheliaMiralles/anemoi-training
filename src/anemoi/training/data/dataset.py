@@ -41,6 +41,10 @@ class NativeGridDataset(IterableDataset):
         rollout: int = 1,
         multistep: int = 1,
         timeincrement: int = 1,
+        relative_date_indices: list = [0,1,2],
+        model_comm_group_rank: int = 0,
+        model_comm_group_id: int = 0,
+        model_comm_num_groups: int = 1,
         shuffle: bool = True,
         label: str = "generic",
         effective_bs: int = 1,
@@ -59,6 +63,14 @@ class NativeGridDataset(IterableDataset):
             time increment between samples, by default 1
         multistep : int, optional
             collate (t-1, ... t - multistep) into the input state vector, by default 1
+        relative_date_indices : list
+            list of time indices to load from the data relative to the current sample i in __iter__
+        model_comm_group_rank : int, optional
+            process rank in the torch.distributed group (important when running on multiple GPUs), by default 0
+        model_comm_group_id: int, optional
+            device group ID, default 0
+        model_comm_num_groups : int, optional
+            total number of device groups, by default 1
         shuffle : bool, optional
             Shuffle batches, by default True
         label : str, optional
@@ -94,10 +106,11 @@ class NativeGridDataset(IterableDataset):
         self.shuffle = shuffle
 
         # Data dimensions
-        self.multi_step = multistep
-        assert self.multi_step > 0, "Multistep value must be greater than zero."
         self.ensemble_dim: int = 2
         self.ensemble_size = self.data.shape[self.ensemble_dim]
+
+        # relative index of dates to extract
+        self.relative_date_indices = relative_date_indices
 
     @cached_property
     def statistics(self) -> dict:
@@ -136,7 +149,7 @@ class NativeGridDataset(IterableDataset):
         dataset length minus rollout minus additional multistep inputs
         (if time_increment is 1).
         """
-        return get_usable_indices(self.data.missing, len(self.data), self.rollout, self.multi_step, self.timeincrement)
+        return get_usable_indices(self.data.missing, len(self.data), np.array(self.relative_date_indices, dtype=np.int64), self.data.model_run_ids)
 
     def set_comm_group_info(
         self,
@@ -281,6 +294,7 @@ class NativeGridDataset(IterableDataset):
             grid_shard_indices = self.grid_indices.get_shard_indices(self.reader_group_rank)
             x = self.data[start : end : self.timeincrement, :, :, :]
             x = x[..., grid_shard_indices]  # select the grid shard
+            x = self.data[self.relative_date_indices + i] #NOTE: this requires an update to anemoi datasets
             x = rearrange(x, "dates variables ensemble gridpoints -> dates ensemble gridpoints variables")
             self.ensemble_dim = 1
 
@@ -290,9 +304,7 @@ class NativeGridDataset(IterableDataset):
         return f"""
             {super().__repr__()}
             Dataset: {self.data}
-            Rollout: {self.rollout}
-            Multistep: {self.multi_step}
-            Timeincrement: {self.timeincrement}
+            Relative dates: {self.relative_date_indices}
         """
 
 
