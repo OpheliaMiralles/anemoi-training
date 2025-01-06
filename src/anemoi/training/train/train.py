@@ -64,7 +64,8 @@ class AnemoiTrainer:
         OmegaConf.resolve(config)
         self.config = config
 
-        self.start_from_checkpoint = bool(self.config.training.run_id) or bool(self.config.training.fork_run_id)
+        self.start_from_checkpoint = bool(self.config.training.run_id) or bool(
+            self.config.training.fork_run_id)
         self.load_weights_only = self.config.training.load_weights_only
         self.parent_uuid = None
 
@@ -84,7 +85,8 @@ class AnemoiTrainer:
         """DataModule instance and DataSets."""
         datamodule = AnemoiDatasetsDataModule(self.config, self.graph_data)
         self.config.data.num_features = len(datamodule.ds_train.data.variables)
-        LOGGER.info("Number of data variables: %s", str(len(datamodule.ds_train.data.variables)))
+        LOGGER.info("Number of data variables: %s",
+                    str(len(datamodule.ds_train.data.variables)))
         LOGGER.debug("Variables: %s", str(datamodule.ds_train.data.variables))
         return datamodule
 
@@ -136,7 +138,8 @@ class AnemoiTrainer:
 
         from anemoi.graphs.create import GraphCreator
 
-        graph_config = DotDict(OmegaConf.to_container(self.config.graph, resolve=True))
+        graph_config = DotDict(
+            OmegaConf.to_container(self.config.graph, resolve=True))
         return GraphCreator(config=graph_config).create(
             save_path=graph_filename,
             overwrite=self.config.graph.overwrite,
@@ -153,18 +156,26 @@ class AnemoiTrainer:
             "statistics": self.datamodule.statistics,
             "supporting_arrays": self.supporting_arrays,
         }
-        train_module = importlib.import_module(getattr(self.config.training, "train_module", "anemoi.training.train.forecaster"))
-        train_func = getattr(train_module, getattr(self.config.training, "train_function", "GraphForecaster"))
+        train_module = importlib.import_module(
+            getattr(self.config.training, "train_module",
+                    "anemoi.training.train.forecaster"))
+        train_func = getattr(
+            train_module,
+            getattr(self.config.training, "train_function", "GraphForecaster"))
+        model = train_func(**kwargs)
         #NOTE: instantiate would be preferable, but I run into issues with "config" being the first kwarg of instantiate itself.
         if self.load_weights_only:
             # Sanify the checkpoint for transfer learning
             if self.config.training.transfer_learning:
-                LOGGER.info("Loading weights with Transfer Learning from %s", self.last_checkpoint)
+                LOGGER.info("Loading weights with Transfer Learning from %s",
+                            self.last_checkpoint)
                 return transfer_learning_loading(model, self.last_checkpoint)
 
-            LOGGER.info("Restoring only model weights from %s", self.last_checkpoint)
-            return train_func.load_from_checkpoint(self.last_checkpoint, **kwargs)
-        return train_func(**kwargs)
+            LOGGER.info("Restoring only model weights from %s",
+                        self.last_checkpoint)
+            return train_func.load_from_checkpoint(self.last_checkpoint,
+                                                   **kwargs)
+        return model
 
     @rank_zero_only
     def _get_mlflow_run_id(self) -> str:
@@ -219,7 +230,8 @@ class AnemoiTrainer:
 
         # Check if the last checkpoint exists
         if Path(checkpoint).exists():
-            LOGGER.info("Resuming training from last checkpoint: %s", checkpoint)
+            LOGGER.info("Resuming training from last checkpoint: %s",
+                        checkpoint)
             return checkpoint
 
         if rank_zero_only.rank == 0:
@@ -245,8 +257,7 @@ class AnemoiTrainer:
                 "data_indices": self.datamodule.data_indices,
                 "provenance_training": gather_provenance_info(),
                 "timestamp": datetime.datetime.now(tz=datetime.timezone.utc),
-            },
-        )
+            }, )
 
     @cached_property
     def supporting_arrays(self) -> dict:
@@ -268,10 +279,12 @@ class AnemoiTrainer:
                     # torch.profiler.ProfilerActivity.CPU,  # this is memory-hungry
                     torch.profiler.ProfilerActivity.CUDA,
                 ],
-                schedule=torch.profiler.schedule(wait=1, warmup=1, active=3, repeat=2),
+                schedule=torch.profiler.schedule(wait=1,
+                                                 warmup=1,
+                                                 active=3,
+                                                 repeat=2),
                 on_trace_ready=torch.profiler.tensorboard_trace_handler(
-                    dir_name=self.config.hardware.paths.logs.tensorboard,
-                ),
+                    dir_name=self.config.hardware.paths.logs.tensorboard, ),
                 profile_memory=True,
                 record_shapes=True,
                 with_stack=True,
@@ -302,21 +315,25 @@ class AnemoiTrainer:
             "tpu",
         }, f"Invalid accelerator ({self.config.hardware.accelerator}) in hardware config."
         if self.config.hardware.accelerator == "cpu":
-            LOGGER.info("WARNING: Accelerator set to CPU, this should only be used for debugging.")
+            LOGGER.info(
+                "WARNING: Accelerator set to CPU, this should only be used for debugging."
+            )
         return self.config.hardware.accelerator
 
     def _log_information(self) -> None:
         # Log number of variables (features)
-        num_fc_features = len(self.datamodule.ds_train.data.variables) - len(self.config.data.forcing)
-        LOGGER.debug("Total number of prognostic variables: %d", num_fc_features)
-        LOGGER.debug("Total number of auxiliary variables: %d", len(self.config.data.forcing))
+        num_fc_features = len(self.datamodule.ds_train.data.variables) - len(
+            self.config.data.forcing)
+        LOGGER.debug("Total number of prognostic variables: %d",
+                     num_fc_features)
+        LOGGER.debug("Total number of auxiliary variables: %d",
+                     len(self.config.data.forcing))
 
         # Log learning rate multiplier when running single-node, multi-GPU and/or multi-node
         total_number_of_model_instances = (
-            self.config.hardware.num_nodes
-            * self.config.hardware.num_gpus_per_node
-            / self.config.hardware.num_gpus_per_model
-        )
+            self.config.hardware.num_nodes *
+            self.config.hardware.num_gpus_per_node /
+            self.config.hardware.num_gpus_per_model)
 
         LOGGER.debug(
             "Total GPU count / model group size: %d - NB: the learning rate will be scaled by this factor!",
@@ -324,11 +341,14 @@ class AnemoiTrainer:
         )
         LOGGER.debug(
             "Effective learning rate: %.3e",
-            int(total_number_of_model_instances) * self.config.training.lr.rate,
+            int(total_number_of_model_instances) *
+            self.config.training.lr.rate,
         )
-        LOGGER.debug("Rollout window length: %d", self.config.training.rollout.start)
+        LOGGER.debug("Rollout window length: %d",
+                     self.config.training.rollout.start)
 
-        if self.config.training.max_epochs is not None and self.config.training.max_steps not in (None, -1):
+        if self.config.training.max_epochs is not None and self.config.training.max_steps not in (
+                None, -1):
             LOGGER.info(
                 "Training limits: max_epochs=%d, max_steps=%d. "
                 "Training will stop when either limit is reached first. "
@@ -344,9 +364,11 @@ class AnemoiTrainer:
         self.fork_run_server2server = None
         if self.config.diagnostics.log.mlflow.enabled:
             self.parent_run_server2server = self.mlflow_logger._parent_run_server2server
-            LOGGER.info("Parent run server2server: %s", self.parent_run_server2server)
+            LOGGER.info("Parent run server2server: %s",
+                        self.parent_run_server2server)
             self.fork_run_server2server = self.mlflow_logger._fork_run_server2server
-            LOGGER.info("Fork run server2server: %s", self.fork_run_server2server)
+            LOGGER.info("Fork run server2server: %s",
+                        self.fork_run_server2server)
 
     def _update_paths(self) -> None:
         """Update the paths in the configuration."""
@@ -355,15 +377,19 @@ class AnemoiTrainer:
             # Multi-gpu new runs or forked runs - only rank 0
             # Multi-gpu resumed runs - all ranks
             self.lineage_run = self.parent_run_server2server or self.run_id
-            self.config.hardware.paths.checkpoints = Path(self.config.hardware.paths.checkpoints, self.lineage_run)
-            self.config.hardware.paths.plots = Path(self.config.hardware.paths.plots, self.lineage_run)
+            self.config.hardware.paths.checkpoints = Path(
+                self.config.hardware.paths.checkpoints, self.lineage_run)
+            self.config.hardware.paths.plots = Path(
+                self.config.hardware.paths.plots, self.lineage_run)
         elif self.config.training.fork_run_id:
             # WHEN USING MANY NODES/GPUS
             self.lineage_run = self.parent_run_server2server or self.config.training.fork_run_id
             # Only rank non zero in the forked run will go here
-            self.config.hardware.paths.checkpoints = Path(self.config.hardware.paths.checkpoints, self.lineage_run)
+            self.config.hardware.paths.checkpoints = Path(
+                self.config.hardware.paths.checkpoints, self.lineage_run)
 
-        LOGGER.info("Checkpoints path: %s", self.config.hardware.paths.checkpoints)
+        LOGGER.info("Checkpoints path: %s",
+                    self.config.hardware.paths.checkpoints)
         LOGGER.info("Plots path: %s", self.config.hardware.paths.plots)
 
     @cached_property
@@ -371,7 +397,8 @@ class AnemoiTrainer:
         """Training strategy."""
         return DDPGroupStrategy(
             self.config.hardware.num_gpus_per_model,
-            self.config.dataloader.get("read_group_size", self.config.hardware.num_gpus_per_model),
+            self.config.dataloader.get(
+                "read_group_size", self.config.hardware.num_gpus_per_model),
             static_graph=not self.config.training.accum_grad_batches > 1,
         )
 
@@ -398,7 +425,8 @@ class AnemoiTrainer:
             num_sanity_val_steps=self.config.training.num_sanity_val_steps,
             accumulate_grad_batches=self.config.training.accum_grad_batches,
             gradient_clip_val=self.config.training.gradient_clip.val,
-            gradient_clip_algorithm=self.config.training.gradient_clip.algorithm,
+            gradient_clip_algorithm=self.config.training.gradient_clip.
+            algorithm,
             # we have our own DDP-compliant sampler logic baked into the dataset
             use_distributed_sampler=False,
             profiler=self.profiler,

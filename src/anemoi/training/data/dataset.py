@@ -41,7 +41,7 @@ class NativeGridDataset(IterableDataset):
         rollout: int = 1,
         multistep: int = 1,
         timeincrement: int = 1,
-        relative_date_indices: list = [0,1,2],
+        relative_date_indices: list = [0, 1, 2],
         model_comm_group_rank: int = 0,
         model_comm_group_id: int = 0,
         model_comm_num_groups: int = 1,
@@ -149,7 +149,12 @@ class NativeGridDataset(IterableDataset):
         dataset length minus rollout minus additional multistep inputs
         (if time_increment is 1).
         """
-        return get_usable_indices(self.data.missing, len(self.data), np.array(self.relative_date_indices, dtype=np.int64), self.data.model_run_ids)
+        return get_usable_indices(
+            self.data.missing,
+            len(self.data),
+            np.array(self.relative_date_indices, dtype=np.int64),
+            self.data.model_run_ids,
+        )
 
     def set_comm_group_info(
         self,
@@ -288,13 +293,9 @@ class NativeGridDataset(IterableDataset):
         )
 
         for i in shuffled_chunk_indices:
-            start = i - (self.multi_step - 1) * self.timeincrement
-            end = i + (self.rollout + 1) * self.timeincrement
-
             grid_shard_indices = self.grid_indices.get_shard_indices(self.reader_group_rank)
-            x = self.data[start : end : self.timeincrement, :, :, :]
             x = x[..., grid_shard_indices]  # select the grid shard
-            x = self.data[self.relative_date_indices + i] #NOTE: this requires an update to anemoi datasets
+            x = self.data[self.relative_date_indices + i]  # NOTE: this requires an update to anemoi datasets
             x = rearrange(x, "dates variables ensemble gridpoints -> dates ensemble gridpoints variables")
             self.ensemble_dim = 1
 
