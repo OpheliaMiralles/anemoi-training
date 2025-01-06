@@ -16,8 +16,6 @@ import torch
 import torch.nn as nn
 from anemoi.utils.checkpoints import save_metadata
 
-from anemoi.training.train.forecaster import GraphForecaster
-
 LOGGER = logging.getLogger(__name__)
 
 
@@ -35,6 +33,8 @@ def load_and_prepare_model(lightning_checkpoint_path: str) -> tuple[torch.nn.Mod
         pytorch model, metadata
 
     """
+    from anemoi.training.train.forecaster import GraphForecaster
+
     module = GraphForecaster.load_from_checkpoint(lightning_checkpoint_path)
     model = module.model
 

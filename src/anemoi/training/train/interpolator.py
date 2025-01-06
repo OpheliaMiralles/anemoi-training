@@ -9,35 +9,15 @@
 
 
 import logging
-import math
-import os
-from collections import defaultdict
-from collections.abc import Generator
 from collections.abc import Mapping
-from typing import Optional
-from typing import Union
 from operator import itemgetter
 
-import numpy as np
-import pytorch_lightning as pl
 import torch
 from anemoi.models.data_indices.collection import IndexCollection
-from anemoi.models.interface import AnemoiModelInterface
-from anemoi.utils.config import DotDict
-from hydra.utils import instantiate
 from omegaconf import DictConfig
-from omegaconf import OmegaConf
-from timm.scheduler import CosineLRScheduler
-from torch.distributed.distributed_c10d import ProcessGroup
-from torch.distributed.optim import ZeroRedundancyOptimizer
 from torch.utils.checkpoint import checkpoint
 from torch_geometric.data import HeteroData
 
-from anemoi.training.losses.utils import grad_scaler
-from anemoi.training.losses.weightedloss import BaseWeightedLoss
-from anemoi.training.utils.jsonify import map_config_to_primitives
-from anemoi.training.utils.masks import Boolean1DMask
-from anemoi.training.utils.masks import NoOutputMask
 
 from anemoi.training.train.forecaster import GraphForecaster
 
@@ -54,6 +34,7 @@ class GraphInterpolator(GraphForecaster):
         statistics: dict,
         data_indices: IndexCollection,
         metadata: dict,
+        supporting_arrays: dict
     ) -> None:
         """Initialize graph neural network interpolator.
 
@@ -71,7 +52,7 @@ class GraphInterpolator(GraphForecaster):
             Provenance information
 
         """
-        super().__init__(config = config, graph_data = graph_data, statistics = statistics, data_indices = data_indices, metadata = metadata)
+        super().__init__(config = config, graph_data = graph_data, statistics = statistics, data_indices = data_indices, metadata = metadata, supporting_arrays=supporting_arrays)
         self.target_forcing_indices = itemgetter(*config.training.target_forcing.data)(data_indices.data.input.name_to_index)
         if type(self.target_forcing_indices) == int:
             self.target_forcing_indices = [self.target_forcing_indices]
