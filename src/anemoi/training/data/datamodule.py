@@ -239,21 +239,11 @@ class AnemoiDatasetsDataModule(pl.LightningDataModule):
         label: str = "generic",
     ) -> NativeGridDataset:
         data_reader = self.add_model_run_ids(data_reader)  # NOTE: Temporary
-        # Compute effective batch size
-        effective_bs = (
-            self.config.dataloader.batch_size["training"]
-            * self.config.hardware.num_gpus_per_node
-            * self.config.hardware.num_nodes
-            // self.config.hardware.num_gpus_per_model
-        )
-
         data = NativeGridDataset(
             data_reader=data_reader,
             relative_date_indices=self.relative_date_indices,
             shuffle=shuffle,
-            grid_indices=self.grid_indices,
             label=label,
-            effective_bs=effective_bs,
         )
         return data
 
