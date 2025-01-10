@@ -121,13 +121,24 @@ class GraphForecaster(pl.LightningModule):
             "limited_area_mask": (2, limited_area_mask),
         }
         self.updated_loss_mask = False
-
-        self.loss = self.get_loss_function(config.training.training_loss, scalars=self.scalars, **loss_kwargs)
-
-        assert isinstance(self.loss, BaseWeightedLoss) and not isinstance(
-            self.loss,
-            torch.nn.ModuleList,
-        ), f"Loss function must be a `BaseWeightedLoss`, not a {type(self.loss).__name__!r}"
+        if config.training.training_loss._target_ == 'anemoi.training.losses.combined.CombinedLoss':
+            assert "loss_weights" in config.training.training_loss, "Loss weights must be provided for combined loss"
+            losses = []
+            ignore_nans = config.training.training_loss.get("ignore_nans", False) # no point in doing this for each loss, nan+nan is nan
+            for loss in config.training.training_loss.losses:
+                node_weighting = instantiate(loss.node_weights)
+                loss_node_weights = node_weighting.weights(graph_data)
+                loss_node_weights = self.output_mask.apply(loss_node_weights, dim=0, fill_value=0.0)
+                loss_instantiated = self.get_loss_function(loss, scalars=self.scalars, **{"node_weights": loss_node_weights, "ignore_nans": ignore_nans})
+                losses.append(loss_instantiated)
+                assert isinstance(loss_instantiated, BaseWeightedLoss)
+            self.loss = instantiate({"_target_": config.training.training_loss._target_}, losses=losses, loss_weights = config.training.training_loss.loss_weights, **loss_kwargs)
+        else:
+            self.loss = self.get_loss_function(config.training.training_loss, scalars=self.scalars, **loss_kwargs)
+            assert isinstance(self.loss, BaseWeightedLoss) and not isinstance(
+                self.loss,
+                torch.nn.ModuleList,
+            ), f"Loss function must be a `BaseWeightedLoss`, not a {type(self.loss).__name__!r}"
 
         self.metrics = self.get_loss_function(config.training.validation_metrics, scalars=self.scalars, **loss_kwargs)
         if not isinstance(self.metrics, torch.nn.ModuleList):

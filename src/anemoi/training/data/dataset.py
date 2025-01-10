@@ -124,6 +124,51 @@ class NativeGridDataset(IterableDataset):
         (if time_increment is 1).
         """
         return get_usable_indices(self.data.missing, len(self.data), np.array(self.relative_date_indices, dtype=np.int64), self.data.model_run_ids)
+    
+    def set_comm_group_info(
+        self,
+        global_rank: int,
+        model_comm_group_id: int,
+        model_comm_group_rank: int,
+        model_comm_num_groups: int,
+        reader_group_rank: int,
+        reader_group_size: int,
+    ) -> None:
+        """Set model and reader communication group information (called by DDPGroupStrategy).
+
+        Parameters
+        ----------
+        global_rank : int
+            Global rank
+        model_comm_group_id : int
+            Model communication group ID
+        model_comm_group_rank : int
+            Model communication group rank
+        model_comm_num_groups : int
+            Number of model communication groups
+        reader_group_rank : int
+            Reader group rank
+        reader_group_size : int
+            Reader group size
+        """
+        self.global_rank = global_rank
+        self.model_comm_group_id = model_comm_group_id
+        self.model_comm_group_rank = model_comm_group_rank
+        self.model_comm_num_groups = model_comm_num_groups
+        self.reader_group_rank = reader_group_rank
+        self.reader_group_size = reader_group_size
+
+        assert self.reader_group_size >= 1, "reader_group_size must be positive"
+
+        LOGGER.debug(
+            "NativeGridDataset.set_group_info(): global_rank %d, model_comm_group_id %d, "
+            "model_comm_group_rank %d, model_comm_num_groups %d, reader_group_rank %d",
+            global_rank,
+            model_comm_group_id,
+            model_comm_group_rank,
+            model_comm_num_groups,
+            reader_group_rank,
+        )
 
     def per_worker_init(self, n_workers: int, worker_id: int) -> None:
         """Called by worker_init_func on each copy of dataset.
@@ -227,7 +272,10 @@ class NativeGridDataset(IterableDataset):
         )
 
         for i in shuffled_chunk_indices:
-            x = self.data[self.relative_date_indices + i] #NOTE: this requires an update to anemoi datasets
+            x = []
+            for idx in list(self.relative_date_indices + i):
+                x.append(self.data[idx]) #NOTE: this requires an update to anemoi datasets
+            x = np.stack(x, axis=0)
             x = rearrange(x, "dates variables ensemble gridpoints -> dates ensemble gridpoints variables")
             self.ensemble_dim = 1
 
