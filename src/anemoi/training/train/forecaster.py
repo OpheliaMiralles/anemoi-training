@@ -72,7 +72,7 @@ class GraphForecaster(pl.LightningModule):
         """
         super().__init__()
 
-        graph_data = graph_data.to(self.device)
+        self.graph_data = graph_data = graph_data.to(self.device)
 
         if config.model.get("output_mask", None) is not None:
             self.output_mask = Boolean1DMask(graph_data[config.graph.data][config.model.output_mask])
@@ -235,6 +235,13 @@ class GraphForecaster(pl.LightningModule):
             return instantiate({"_target_": config._target_}, loss=loss, data_indices=self.data_indices, **config)
         
         scalars_to_include = config.__dict__.pop("scalars", [])
+
+        if config.get("node_weights", None) is not None:
+            node_weighting = instantiate(config.node_weights)
+            node_weights = node_weighting.weights(self.graph_data)
+            node_weights = self.output_mask.apply(node_weights, dim=0, fill_value=0.0)
+            kwargs["node_weights"] = node_weights
+
         loss_function = instantiate(config, **kwargs)
 
         if not isinstance(loss_function, BaseWeightedLoss):

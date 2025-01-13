@@ -48,7 +48,7 @@ class LogSpectralDistance(FunctionalWeightedLoss):
         scalar_indices: tuple[int, ...] | None = None,
         without_scalars: list[str] | list[int] | None = None,
     ) -> torch.Tensor:
-        result = super().forward(pred, target, squash, scalar_indices, without_scalars)
+        result = super().forward(pred, target, squash)
         lsd = torch.sqrt(torch.mean(result, dim=(-1, -2, -3)))  # Mean over last 3 dimensions
         lsd = torch.where(torch.isnan(lsd), torch.zeros_like(lsd), lsd)
         return lsd
