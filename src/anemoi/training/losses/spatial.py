@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import logging
-from abc import abstractmethod
-
 import torch
 import torch.fft
 
@@ -46,7 +44,6 @@ class LogSpectralDistance(FunctionalWeightedLoss):
     ) -> None:
         super().__init__(node_weights, ignore_nans)
 
-    @abstractmethod
     def calculate_difference(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         """Calculate Difference between prediction and target."""
         return log_spectral_distance(pred, target)

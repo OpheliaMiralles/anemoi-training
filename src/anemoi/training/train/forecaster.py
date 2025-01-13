@@ -121,26 +121,9 @@ class GraphForecaster(pl.LightningModule):
             "limited_area_mask": (2, limited_area_mask),
         }
         self.updated_loss_mask = False
-        if config.training.training_loss._target_ == 'anemoi.training.losses.combined.CombinedLoss':
-            assert "loss_weights" in config.training.training_loss, "Loss weights must be provided for combined loss"
-            losses = []
-            ignore_nans = config.training.training_loss.get("ignore_nans", False) # no point in doing this for each loss, nan+nan is nan
-            for loss in config.training.training_loss.losses:
-                node_weighting = instantiate(loss.node_weights)
-                loss_node_weights = node_weighting.weights(graph_data)
-                loss_node_weights = self.output_mask.apply(loss_node_weights, dim=0, fill_value=0.0)
-                loss_instantiated = self.get_loss_function(loss, scalars=self.scalars, **{"node_weights": loss_node_weights, "ignore_nans": ignore_nans})
-                losses.append(loss_instantiated)
-                assert isinstance(loss_instantiated, BaseWeightedLoss)
-            self.loss = instantiate({"_target_": config.training.training_loss._target_}, losses=losses, loss_weights = config.training.training_loss.loss_weights, **loss_kwargs)
-        else:
-            self.loss = self.get_loss_function(config.training.training_loss, scalars=self.scalars, **loss_kwargs)
-            assert isinstance(self.loss, BaseWeightedLoss) and not isinstance(
-                self.loss,
-                torch.nn.ModuleList,
-            ), f"Loss function must be a `BaseWeightedLoss`, not a {type(self.loss).__name__!r}"
+        self.loss = self.get_loss_function(config.training.training_loss, **loss_kwargs)
 
-        self.metrics = self.get_loss_function(config.training.validation_metrics, scalars=self.scalars, **loss_kwargs)
+        self.metrics = self.get_loss_function(config.training.validation_metrics, **loss_kwargs)
         if not isinstance(self.metrics, torch.nn.ModuleList):
             self.metrics = torch.nn.ModuleList([self.metrics])
 
@@ -183,10 +166,9 @@ class GraphForecaster(pl.LightningModule):
         return self.model(x, self.model_comm_group)
 
     # Future import breaks other type hints TODO Harrison Cook
-    @staticmethod
     def get_loss_function(
+        self,
         config: DictConfig,
-        scalars: Union[dict[str, tuple[Union[int, tuple[int, ...], torch.Tensor]]], None] = None,  # noqa: FA100
         **kwargs,
     ) -> Union[BaseWeightedLoss, torch.nn.ModuleList]:  # noqa: FA100
         """Get loss functions from config.
@@ -222,30 +204,48 @@ class GraphForecaster(pl.LightningModule):
         if isinstance(config_container, list):
             return torch.nn.ModuleList(
                 [
-                    GraphForecaster.get_loss_function(
+                    self.get_loss_function(
                         OmegaConf.create(loss_config),
-                        scalars=scalars,
                         **kwargs,
                     )
                     for loss_config in config
                 ],
             )
 
-        loss_config = OmegaConf.to_container(config, resolve=True)
-        scalars_to_include = loss_config.pop("scalars", [])
+        OmegaConf.resolve(config)
 
-        # Instantiate the loss function with the loss_init_config
-        loss_function = instantiate(loss_config, **kwargs)
+        # Special case for combined loss
+        # The underlying losses must be instantiated first
+        # with kwargs that don't come from the config,
+        # so we can't use the normal instantiation method.
+        if config.get("_target_") == "anemoi.training.losses.combined.CombinedLoss":
+            assert hasattr(config, "loss_weights"), "Loss weights must be provided for combined loss"
+            loss_kwargs = kwargs.copy()
+            if config.get("ignore_nans", False):
+                loss_kwargs["ignore_nans"] = True
+
+            losses = [self.get_loss_function(loss, **loss_kwargs) for loss in config.losses]
+            return instantiate(
+                {"_target_": config._target_}, losses=losses, loss_weights=config.loss_weights, **kwargs
+            )
+
+        if config.get("_target_") == "anemoi.training.losses.filtering.FilteringLossWrapper":
+            loss = self.get_loss_function(config.loss, **kwargs)
+            config._content.pop("loss")
+            return instantiate({"_target_": config._target_}, loss=loss, data_indices=self.data_indices, **config)
+        
+        scalars_to_include = config.__dict__.pop("scalars", [])
+        loss_function = instantiate(config, **kwargs)
 
         if not isinstance(loss_function, BaseWeightedLoss):
             error_msg = f"Loss must be a subclass of 'BaseWeightedLoss', not {type(loss_function)}"
             raise TypeError(error_msg)
 
         for key in scalars_to_include:
-            if key not in scalars or []:
-                error_msg = f"Scalar {key!r} not found in valid scalars: {list(scalars.keys())}"
+            if key not in self.scalars or []:
+                error_msg = f"Scalar {key!r} not found in valid scalars: {list(self.scalars.keys())}"
                 raise ValueError(error_msg)
-            loss_function.add_scalar(*scalars[key], name=key)
+            loss_function.add_scalar(*self.scalars[key], name=key)
 
         return loss_function
 
