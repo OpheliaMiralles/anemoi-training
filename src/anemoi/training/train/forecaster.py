@@ -179,9 +179,7 @@ class GraphForecaster(pl.LightningModule):
         ----------
         config : DictConfig
             Loss function configuration, should include `scalars` if scalars are to be added to the loss function.
-        scalars : Union[dict[str, tuple[Union[int, tuple[int, ...], torch.Tensor]]], None], optional
-            Scalars which can be added to the loss function. Defaults to None., by default None
-            If a scalar is to be added to the loss, ensure it is in `scalars` in the loss config
+            If a scalar is to be added to the loss, ensure it is in `self.scalars` in the loss config
             E.g.
                 If `scalars: ['variable']` is set in the config, and `variable` in `scalars`
                 `variable` will be added to the scalar of the loss function.

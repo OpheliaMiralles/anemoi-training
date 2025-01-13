@@ -1,8 +1,25 @@
+# (C) Copyright 2024 Anemoi contributors.
+#
+# This software is licensed under the terms of the Apache Licence Version 2.0
+# which can be obtained at http://www.apache.org/licenses/LICENSE-2.0.
+#
+# In applying this licence, ECMWF does not waive the privileges and immunities
+# granted to it by virtue of its status as an intergovernmental organisation
+# nor does it submit to any jurisdiction.
+
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 import torch
-from anemoi.models.data_indices.collection import IndexCollection
+
+if TYPE_CHECKING:
+    from anemoi.models.data_indices.collection import IndexCollection
 
 
 class FilteringLossWrapper(torch.nn.Module):
+    """Loss wrapper to filter variables to compute the loss on."""
 
     def __init__(
         self,
@@ -25,7 +42,7 @@ class FilteringLossWrapper(torch.nn.Module):
         """
         if predicted_variables and target_variables:
             assert len(predicted_variables) == len(
-                target_variables
+                target_variables,
             ), "predicted and target variables must have the same length for loss computation"
 
         super().__init__()
@@ -47,7 +64,7 @@ class FilteringLossWrapper(torch.nn.Module):
             target_indices = output_indices
 
         assert len(predicted_indices) == len(
-            target_indices
+            target_indices,
         ), "predicted and target variables must have the same length for loss computation"
 
         self.predicted_indices = predicted_indices

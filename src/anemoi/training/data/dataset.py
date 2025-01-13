@@ -33,7 +33,7 @@ class NativeGridDataset(IterableDataset):
     def __init__(
         self,
         data_reader: Callable,
-        relative_date_indices: list = [0,1,2],
+        relative_date_indices: list | None = None,
         model_comm_group_rank: int = 0,
         model_comm_group_id: int = 0,
         model_comm_num_groups: int = 1,
@@ -60,6 +60,8 @@ class NativeGridDataset(IterableDataset):
             label for the dataset, by default "generic"
 
         """
+        if relative_date_indices is None:
+            relative_date_indices = [0, 1, 2]
         self.label = label
 
         self.data = data_reader
@@ -123,8 +125,13 @@ class NativeGridDataset(IterableDataset):
         dataset length minus rollout minus additional multistep inputs
         (if time_increment is 1).
         """
-        return get_usable_indices(self.data.missing, len(self.data), np.array(self.relative_date_indices, dtype=np.int64), self.data.model_run_ids)
-    
+        return get_usable_indices(
+            self.data.missing,
+            len(self.data),
+            np.array(self.relative_date_indices, dtype=np.int64),
+            self.data.model_run_ids,
+        )
+
     def set_comm_group_info(
         self,
         global_rank: int,
@@ -272,9 +279,8 @@ class NativeGridDataset(IterableDataset):
         )
 
         for i in shuffled_chunk_indices:
-            x = []
-            for idx in list(self.relative_date_indices + i):
-                x.append(self.data[idx]) #NOTE: this requires an update to anemoi datasets
+            # NOTE: this requires an update to anemoi datasets
+            x = [self.data[idx] for idx in list(self.relative_date_indices + i)]
             x = np.stack(x, axis=0)
             x = rearrange(x, "dates variables ensemble gridpoints -> dates ensemble gridpoints variables")
             self.ensemble_dim = 1

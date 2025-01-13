@@ -18,7 +18,6 @@ from omegaconf import DictConfig
 from torch.utils.checkpoint import checkpoint
 from torch_geometric.data import HeteroData
 
-
 from anemoi.training.train.forecaster import GraphForecaster
 
 LOGGER = logging.getLogger(__name__)
@@ -62,9 +61,9 @@ class GraphInterpolator(GraphForecaster):
             supporting_arrays=supporting_arrays,
         )
         self.known_future_variables = itemgetter(*config.training.known_future_variables)(
-            data_indices.data.input.name_to_index
+            data_indices.data.input.name_to_index,
         )
-        if type(self.known_future_variables) == int:
+        if isinstance(self.known_future_variables, int):
             self.known_future_variables = [self.known_future_variables]
         self.boundary_times = config.training.explicit_times.input
         self.interp_times = config.training.explicit_times.target
@@ -90,7 +89,12 @@ class GraphInterpolator(GraphForecaster):
         x_bound = torch.cat([x_init, x_future], dim=-1)
         kfv = self.known_future_variables
         target_forcing = torch.empty(
-            batch.shape[0], batch.shape[2], batch.shape[3], len(kfv) + 1, device=self.device, dtype=batch.dtype
+            batch.shape[0],
+            batch.shape[2],
+            batch.shape[3],
+            len(kfv) + 1,
+            device=self.device,
+            dtype=batch.dtype,
         )
         for interp_step in self.interp_times:
             # get the forcing information for the target interpolation time:
@@ -98,7 +102,6 @@ class GraphInterpolator(GraphForecaster):
             target_forcing[..., -1] = (interp_step - self.boundary_times[1]) / (
                 self.boundary_times[1] - self.boundary_times[0]
             )
-            # TODO: make fraction time one of a config given set of arbitrary custom forcing functions.
             x_with_intermediate_forcings = torch.cat([x_bound, target_forcing], dim=-1).unsqueeze(dim=1)
             y_pred = self(x_with_intermediate_forcings)
             y = batch[:, self.imap[interp_step], ...]
@@ -107,7 +110,9 @@ class GraphInterpolator(GraphForecaster):
             metrics_next = {}
             if validation_mode:
                 metrics_next = self.calculate_val_metrics(
-                    y_pred, y, interp_step - 1
+                    y_pred,
+                    y,
+                    interp_step - 1,
                 )  # expects rollout but can be repurposed here.
             metrics.update(metrics_next)
             y_preds.extend(y_pred)

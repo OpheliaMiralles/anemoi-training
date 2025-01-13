@@ -2,7 +2,7 @@
 > **Repository Migration Notice**
 > >
 > This repository has been migrated to our new consolidated Anemoi Core mono-repository. All future development, including new features and bug fixes, will take place in the new repository. Please update your references to use the new location:
-> 
+>
 > 🔗 [@ecmwf/anemoi-core](https://github.com/ecmwf/anemoi-core)
 
 # anemoi-training
