@@ -34,10 +34,11 @@ class FilteringLossWrapper(torch.nn.Module):
         self.target_variables = target_variables
         self.loss_kwargs = loss_kwargs
         self.data_indices = data_indices
-        name_to_index = data_indices.model.output.name_to_index
-        output_indices = data_indices.internal_model.output.full
+        name_to_index = data_indices.data.output.name_to_index
+        model_output = data_indices.internal_model.output
+        output_indices = model_output.full
         if self.predicted_variables is not None:
-            predicted_indices = [name_to_index[name] for name in self.predicted_variables]
+            predicted_indices = [model_output.name_to_index[name] for name in self.predicted_variables]
         else:
             predicted_indices = output_indices
         if self.target_variables is not None:

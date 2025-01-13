@@ -92,8 +92,8 @@ class CombinedLoss(torch.nn.Module):
             else:
                 raise TypeError(f"Loss {loss} is not a valid loss function")
         self.loss_weights = loss_weights
-        self.predicted_indices = kwargs.get("predicted_indices", None)
-        self.target_indices = kwargs.get("target_indices", None)
+        self.predicted_indices = kwargs.get("predicted_indices", slice(None))
+        self.target_indices = kwargs.get("target_indices", slice(None))
 
     def forward(
         self,
@@ -121,9 +121,13 @@ class CombinedLoss(torch.nn.Module):
         loss = None
         for i, loss_fn in enumerate(self.losses):
             if loss is not None:
-                loss += self.loss_weights[i] * loss_fn(pred[..., self.predicted_indices], target[..., self.target_indices], **kwargs)
+                loss += self.loss_weights[i] * loss_fn(
+                    pred[..., self.predicted_indices], target[..., self.target_indices], **kwargs
+                )
             else:
-                loss = self.loss_weights[i] * loss_fn(pred[..., self.predicted_indices], target[..., self.target_indices], **kwargs)
+                loss = self.loss_weights[i] * loss_fn(
+                    pred[..., self.predicted_indices], target[..., self.target_indices], **kwargs
+                )
         return loss
 
     @property
