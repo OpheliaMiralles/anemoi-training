@@ -225,15 +225,13 @@ class GraphForecaster(pl.LightningModule):
                 loss_kwargs["ignore_nans"] = True
 
             losses = [self.get_loss_function(loss, **loss_kwargs) for loss in config.losses]
-            return instantiate(
-                {"_target_": config._target_}, losses=losses, loss_weights=config.loss_weights, **kwargs
-            )
+            return instantiate({"_target_": config._target_}, losses=losses, loss_weights=config.loss_weights, **kwargs)
 
         if config.get("_target_") == "anemoi.training.losses.filtering.FilteringLossWrapper":
             loss = self.get_loss_function(config.loss, **kwargs)
             config._content.pop("loss")
             return instantiate({"_target_": config._target_}, loss=loss, data_indices=self.data_indices, **config)
-        
+
         scalars_to_include = config.__dict__.pop("scalars", [])
 
         if config.get("node_weights", None) is not None:
