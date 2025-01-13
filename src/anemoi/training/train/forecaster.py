@@ -239,6 +239,8 @@ class GraphForecaster(pl.LightningModule):
             node_weights = node_weighting.weights(self.graph_data)
             node_weights = self.output_mask.apply(node_weights, dim=0, fill_value=0.0)
             kwargs["node_weights"] = node_weights
+            if node_weights.dtype == torch.bool:
+                node_weights = node_weights.to(torch.int)
 
         loss_function = instantiate(config, **kwargs)
 
