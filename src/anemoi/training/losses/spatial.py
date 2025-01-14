@@ -14,7 +14,6 @@ import logging
 
 import torch
 import torch.fft
-
 from anemoi.training.losses.weightedloss import FunctionalWeightedLoss
 
 LOGGER = logging.getLogger(__name__)
@@ -61,5 +60,5 @@ class LogSpectralDistance(FunctionalWeightedLoss):
         without_scalars: list[str] | list[int] | None = None,
     ) -> torch.Tensor:
         result = super().forward(pred, target, squash, scalar_indices=scalar_indices, without_scalars=without_scalars)
-        lsd = torch.sqrt(torch.mean(result, dim=(-1, -2, -3)))  # Mean over last 3 dimensions
-        return torch.where(torch.isnan(lsd), torch.zeros_like(lsd), lsd)
+        lsd = torch.sqrt(torch.mean(result))
+        return lsd

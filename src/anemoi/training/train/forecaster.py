@@ -20,21 +20,18 @@ import pytorch_lightning as pl
 import torch
 from anemoi.models.data_indices.collection import IndexCollection
 from anemoi.models.interface import AnemoiModelInterface
+from anemoi.training.losses.utils import grad_scaler
+from anemoi.training.losses.weightedloss import BaseWeightedLoss
+from anemoi.training.utils.jsonify import map_config_to_primitives
+from anemoi.training.utils.masks import Boolean1DMask, NoOutputMask
 from anemoi.utils.config import DotDict
 from hydra.utils import instantiate
-from omegaconf import DictConfig
-from omegaconf import OmegaConf
+from omegaconf import DictConfig, OmegaConf
 from timm.scheduler import CosineLRScheduler
 from torch.distributed.distributed_c10d import ProcessGroup
 from torch.distributed.optim import ZeroRedundancyOptimizer
 from torch.utils.checkpoint import checkpoint
 from torch_geometric.data import HeteroData
-
-from anemoi.training.losses.utils import grad_scaler
-from anemoi.training.losses.weightedloss import BaseWeightedLoss
-from anemoi.training.utils.jsonify import map_config_to_primitives
-from anemoi.training.utils.masks import Boolean1DMask
-from anemoi.training.utils.masks import NoOutputMask
 
 LOGGER = logging.getLogger(__name__)
 
@@ -237,8 +234,6 @@ class GraphForecaster(pl.LightningModule):
             node_weights = node_weighting.weights(self.graph_data)
             node_weights = self.output_mask.apply(node_weights, dim=0, fill_value=0.0)
             kwargs["node_weights"] = node_weights
-            if node_weights.dtype == torch.bool:
-                node_weights = node_weights.to(torch.int)
 
         loss_function = instantiate(config, **kwargs)
 
