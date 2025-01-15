@@ -10,12 +10,11 @@
 from __future__ import annotations
 
 import functools
+from collections.abc import Sequence
 from typing import Any
 from typing import Callable
 
 import torch
-
-from anemoi.training.train.forecaster import GraphForecaster
 
 
 class CombinedLoss(torch.nn.Module):
@@ -23,8 +22,7 @@ class CombinedLoss(torch.nn.Module):
 
     def __init__(
         self,
-        *extra_losses: dict[str, Any] | Callable,
-        losses: tuple[dict[str, Any] | Callable] | None = None,
+        losses: Sequence[torch.nn.Module],
         loss_weights: tuple[int, ...],
         **kwargs,
     ):
@@ -39,11 +37,8 @@ class CombinedLoss(torch.nn.Module):
 
         Parameters
         ----------
-        losses: tuple[dict[str, Any]| Callable]
-            Tuple of losses to initialise with `GraphForecaster.get_loss_function`.
-            Allows for kwargs to be passed, and weighings controlled.
-        *extra_losses: dict[str, Any] | Callable
-            Additional arg form of losses to include in the combined loss.
+        losses:
+            Loss objects.
         loss_weights : tuple[int, ...]
             Weights of each loss function in the combined loss.
         kwargs: Any
@@ -76,22 +71,10 @@ class CombinedLoss(torch.nn.Module):
         """
         super().__init__()
 
-        losses = (*(losses or []), *extra_losses)
-
         assert len(losses) == len(loss_weights), "Number of losses and weights must match"
         assert len(losses) > 0, "At least one loss must be provided"
 
-        self.losses = []
-        for loss in losses:
-            if isinstance(loss, dict):
-                self.losses.append(GraphForecaster.get_loss_function(loss, **kwargs))
-            elif isinstance(loss, type):
-                self.losses.append(loss(**kwargs))
-            elif hasattr(loss, "__class__"):
-                self.losses.append(loss)
-            else:
-                msg = f"Loss {loss} is not a valid loss function"
-                raise TypeError(msg)
+        self.losses = losses
         self.loss_weights = loss_weights
         self.predicted_indices = kwargs.get("predicted_indices", slice(None))
         self.target_indices = kwargs.get("target_indices", slice(None))
@@ -122,11 +105,12 @@ class CombinedLoss(torch.nn.Module):
         loss = None
         for i, loss_fn in enumerate(self.losses):
             if loss is not None:
-                loss += self.loss_weights[i] * loss_fn(
+                sub_loss = self.loss_weights[i] * loss_fn(
                     pred[..., self.predicted_indices],
                     target[..., self.target_indices],
                     **kwargs,
                 )
+                loss += sub_loss.expand_as(loss)
             else:
                 loss = self.loss_weights[i] * loss_fn(
                     pred[..., self.predicted_indices],

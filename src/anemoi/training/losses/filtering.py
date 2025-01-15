@@ -27,7 +27,6 @@ class FilteringLossWrapper(torch.nn.Module):
         data_indices: IndexCollection,
         predicted_variables: list[str] | None = None,
         target_variables: list[str] | None = None,
-        **loss_kwargs,
     ):
         """Loss wrapper to filter variables to compute the loss on.
 
@@ -49,7 +48,6 @@ class FilteringLossWrapper(torch.nn.Module):
         self.loss = loss
         self.predicted_variables = predicted_variables
         self.target_variables = target_variables
-        self.loss_kwargs = loss_kwargs
         self.data_indices = data_indices
         name_to_index = data_indices.data.output.name_to_index
         model_output = data_indices.internal_model.output
@@ -70,7 +68,13 @@ class FilteringLossWrapper(torch.nn.Module):
         self.predicted_indices = predicted_indices
         self.target_indices = target_indices
 
-    def forward(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-        pred = pred[..., self.predicted_indices]
-        target = target[..., self.target_indices]
-        return self.loss(pred, target, **self.loss_kwargs)
+    def forward(self, pred: torch.Tensor, target: torch.Tensor, **kwargs) -> torch.Tensor:
+        squash = kwargs.get("squash", True)
+        if squash:
+            return  self.loss(pred[..., self.predicted_indices], target[..., self.predicted_indices], **kwargs)
+        if not squash:
+            len_model_output = pred.shape[-1]
+            loss = torch.zeros(len_model_output, dtype=pred.dtype, device=pred.device, requires_grad=False)
+            loss_per_variable = self.loss(pred[..., self.predicted_indices], target[..., self.predicted_indices], **kwargs)
+            loss[self.predicted_indices] = loss_per_variable
+            return loss

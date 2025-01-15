@@ -20,6 +20,8 @@ import pytorch_lightning as pl
 import torch
 from anemoi.models.data_indices.collection import IndexCollection
 from anemoi.models.interface import AnemoiModelInterface
+from anemoi.training.losses.combined import CombinedLoss
+from anemoi.training.losses.filtering import FilteringLossWrapper
 from anemoi.training.losses.utils import grad_scaler
 from anemoi.training.losses.weightedloss import BaseWeightedLoss
 from anemoi.training.utils.jsonify import map_config_to_primitives
@@ -166,6 +168,7 @@ class GraphForecaster(pl.LightningModule):
     def get_loss_function(
         self,
         config: DictConfig,
+        filter_wrap: bool = True,
         **kwargs,
     ) -> Union[BaseWeightedLoss, torch.nn.ModuleList]:  # noqa: FA100
         """Get loss functions from config.
@@ -180,6 +183,9 @@ class GraphForecaster(pl.LightningModule):
             E.g.
                 If `scalars: ['variable']` is set in the config, and `variable` in `scalars`
                 `variable` will be added to the scalar of the loss function.
+        filter_wrap : bool, optional
+            Whether to wrap the loss function in a `FilteringLossWrapper`.
+            It enables filtering of the variables before computing the loss.
         kwargs : Any
             Additional arguments to pass to the loss function
 
@@ -213,7 +219,10 @@ class GraphForecaster(pl.LightningModule):
         # The underlying losses must be instantiated first
         # with kwargs that don't come from the config,
         # so we can't use the normal instantiation method.
-        if config.get("_target_") == "anemoi.training.losses.combined.CombinedLoss":
+        def full_name(type_: type) -> str:
+            return type_.__module__ + "." + type_.__name__
+
+        if config.get("_target_") == full_name(CombinedLoss):
             assert hasattr(config, "loss_weights"), "Loss weights must be provided for combined loss"
             loss_kwargs = kwargs.copy()
             if config.get("ignore_nans", False):
@@ -222,10 +231,11 @@ class GraphForecaster(pl.LightningModule):
             losses = [self.get_loss_function(loss, **loss_kwargs) for loss in config.losses]
             return instantiate({"_target_": config._target_}, losses=losses, loss_weights=config.loss_weights, **kwargs)
 
-        if config.get("_target_") == "anemoi.training.losses.filtering.FilteringLossWrapper":
-            loss = self.get_loss_function(config.loss, **kwargs)
+        if config.get("_target_") == full_name(FilteringLossWrapper):
+            loss = self.get_loss_function(config.loss, filter_wrap=False, **kwargs)
             config._content.pop("loss")
-            return instantiate({"_target_": config._target_}, loss=loss, data_indices=self.data_indices, **config)
+            config._content.pop("_target_")
+            return FilteringLossWrapper(loss=loss, data_indices=self.data_indices, **config)
 
         scalars_to_include = config.__dict__.pop("scalars", [])
 
@@ -234,6 +244,11 @@ class GraphForecaster(pl.LightningModule):
             node_weights = node_weighting.weights(self.graph_data)
             node_weights = self.output_mask.apply(node_weights, dim=0, fill_value=0.0)
             kwargs["node_weights"] = node_weights
+            if node_weights.dtype == torch.bool:
+                node_weights = node_weights/node_weights.sum()
+            import matplotlib.pyplot as plt
+            plt.scatter(self.graph_data["data"]["x"][:, 0], self.graph_data["data"]["x"][:, 1], c=node_weights)
+            plt.savefig(f"node_weights_{config.node_weights.node_attribute}.png")
 
         loss_function = instantiate(config, **kwargs)
 
@@ -246,6 +261,9 @@ class GraphForecaster(pl.LightningModule):
                 error_msg = f"Scalar {key!r} not found in valid scalars: {list(self.scalars.keys())}"
                 raise ValueError(error_msg)
             loss_function.add_scalar(*self.scalars[key], name=key)
+
+        if filter_wrap:
+            loss_function = FilteringLossWrapper(loss_function, self.data_indices)
 
         return loss_function
 

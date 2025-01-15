@@ -840,11 +840,6 @@ class PlotLoss(BasePerBatchPlotCallback):
         parameter_positions = list(pl_module.data_indices.internal_model.output.name_to_index.values())
         # reorder parameter_names by position
         self.parameter_names = [parameter_names[i] for i in np.argsort(parameter_positions)]
-        if not isinstance(pl_module.loss, BaseWeightedLoss):
-            LOGGER.warning(
-                "Loss function must be a subclass of BaseWeightedLoss, or provide `squash`.",
-                RuntimeWarning,
-            )
 
         batch = pl_module.model.pre_processors(batch, in_place=False)
         for rollout_step in range(pl_module.rollout):
@@ -852,8 +847,8 @@ class PlotLoss(BasePerBatchPlotCallback):
             y_true = batch[
                 :,
                 pl_module.multi_step + rollout_step,
-                ...,
-                pl_module.data_indices.internal_data.output.full,
+                ...
+                #pl_module.data_indices.internal_data.output.full,
             ]
             loss = pl_module.loss(y_hat, y_true, squash=False).cpu().numpy()
 
@@ -939,6 +934,12 @@ class PlotSample(BasePerBatchPlotCallback):
             )
             for name in self.parameters
         }
+        plot_parameters_target_dict = {
+            pl_module.data_indices.data.output.name_to_index[name]: (name,
+                name not in diagnostics,
+            )
+            for name in self.parameters
+        }
 
         # When running in Async mode, it might happen that in the last epoch these tensors
         # have been moved to the cpu (and then the denormalising would fail as the 'input_tensor' would be on CUDA
@@ -955,7 +956,7 @@ class PlotSample(BasePerBatchPlotCallback):
             self.sample_idx,
             pl_module.multi_step - 1 : pl_module.multi_step + pl_module.rollout + 1,
             ...,
-            pl_module.data_indices.internal_data.output.full,
+            #pl_module.data_indices.internal_data.output.full,
         ].cpu()
         data = self.post_processors(input_tensor)
 
@@ -979,6 +980,7 @@ class PlotSample(BasePerBatchPlotCallback):
                 output_tensor[rollout_step, ...],
                 datashader=self.datashader_plotting,
                 precip_and_related_fields=self.precip_and_related_fields,
+                parameters_target=plot_parameters_target_dict,
             )
 
             self._output_figure(
@@ -1016,7 +1018,7 @@ class BasePlotAdditionalMetrics(BasePerBatchPlotCallback):
             self.sample_idx,
             pl_module.multi_step - 1 : pl_module.multi_step + pl_module.rollout + 1,
             ...,
-            pl_module.data_indices.internal_data.output.full,
+            #pl_module.data_indices.internal_data.output.full,
         ].cpu()
 
         data = self.post_processors(input_tensor)

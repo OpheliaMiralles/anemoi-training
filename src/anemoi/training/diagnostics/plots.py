@@ -362,6 +362,7 @@ def plot_predicted_multilevel_flat_sample(
     y_pred: np.ndarray,
     datashader: bool = False,
     precip_and_related_fields: list | None = None,
+    parameters_target: dict[str, int] | None = None,
 ) -> Figure:
     """Plots data for one multilevel latlon-"flat" sample.
 
@@ -403,10 +404,13 @@ def plot_predicted_multilevel_flat_sample(
     fig, ax = plt.subplots(n_plots_x, n_plots_y, figsize=figsize, layout=LAYOUT)
 
     pc_lat, pc_lon = equirectangular_projection(latlons)
-
     for plot_idx, (variable_idx, (variable_name, output_only)) in enumerate(parameters.items()):
         xt = x[..., variable_idx].squeeze() * int(output_only)
-        yt = y_true[..., variable_idx].squeeze()
+        if parameters_target is not None:
+            vidx = [i for _, (i, _) in parameters_target if i==variable_name]
+            yt = y_true[..., vidx].squeeze()
+        else:
+            yt = y_pred[..., variable_idx].squeeze()
         yp = y_pred[..., variable_idx].squeeze()
         if n_plots_x > 1:
             plot_flat_sample(
@@ -681,6 +685,11 @@ def plot_flat_sample(
             )
         else:
             single_plot(fig, ax[0], lon, lat, input_, norm=norm, title=f"{vname} input", datashader=datashader)
+            vmin = combined_error.min()
+            if vmin==0:
+                vcenter = 1e-10
+            else:
+                vcenter=0
             single_plot(
                 fig,
                 ax[4],
@@ -688,7 +697,7 @@ def plot_flat_sample(
                 lat,
                 pred - input_,
                 cmap="bwr",
-                norm=TwoSlopeNorm(vmin=combined_error.min(), vcenter=0.0, vmax=combined_error.max()),
+                norm=TwoSlopeNorm(vmin=vmin, vcenter=vcenter, vmax=combined_error.max()),
                 title=f"{vname} increment [pred - input]",
                 datashader=datashader,
             )
@@ -699,7 +708,7 @@ def plot_flat_sample(
                 lat,
                 truth - input_,
                 cmap="bwr",
-                norm=TwoSlopeNorm(vmin=combined_error.min(), vcenter=0.0, vmax=combined_error.max()),
+                norm=TwoSlopeNorm(vmin=vmin, vcenter=vcenter, vmax=combined_error.max()),
                 title=f"{vname} persist err",
                 datashader=datashader,
             )
