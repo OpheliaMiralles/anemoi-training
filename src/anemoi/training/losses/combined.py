@@ -10,11 +10,14 @@
 from __future__ import annotations
 
 import functools
-from collections.abc import Sequence
+from typing import TYPE_CHECKING
 from typing import Any
 from typing import Callable
 
 import torch
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 
 class CombinedLoss(torch.nn.Module):

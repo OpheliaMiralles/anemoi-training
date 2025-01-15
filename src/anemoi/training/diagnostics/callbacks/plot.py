@@ -41,7 +41,6 @@ from anemoi.training.diagnostics.plots import plot_histogram
 from anemoi.training.diagnostics.plots import plot_loss
 from anemoi.training.diagnostics.plots import plot_power_spectrum
 from anemoi.training.diagnostics.plots import plot_predicted_multilevel_flat_sample
-from anemoi.training.losses.weightedloss import BaseWeightedLoss
 
 if TYPE_CHECKING:
     from typing import Any
@@ -847,8 +846,8 @@ class PlotLoss(BasePerBatchPlotCallback):
             y_true = batch[
                 :,
                 pl_module.multi_step + rollout_step,
-                ...
-                #pl_module.data_indices.internal_data.output.full,
+                ...,
+                # pl_module.data_indices.internal_data.output.full,
             ]
             loss = pl_module.loss(y_hat, y_true, squash=False).cpu().numpy()
 
@@ -935,7 +934,8 @@ class PlotSample(BasePerBatchPlotCallback):
             for name in self.parameters
         }
         plot_parameters_target_dict = {
-            pl_module.data_indices.data.output.name_to_index[name]: (name,
+            pl_module.data_indices.data.output.name_to_index[name]: (
+                name,
                 name not in diagnostics,
             )
             for name in self.parameters
@@ -956,7 +956,7 @@ class PlotSample(BasePerBatchPlotCallback):
             self.sample_idx,
             pl_module.multi_step - 1 : pl_module.multi_step + pl_module.rollout + 1,
             ...,
-            #pl_module.data_indices.internal_data.output.full,
+            # pl_module.data_indices.internal_data.output.full,
         ].cpu()
         data = self.post_processors(input_tensor)
 
@@ -1018,7 +1018,7 @@ class BasePlotAdditionalMetrics(BasePerBatchPlotCallback):
             self.sample_idx,
             pl_module.multi_step - 1 : pl_module.multi_step + pl_module.rollout + 1,
             ...,
-            #pl_module.data_indices.internal_data.output.full,
+            # pl_module.data_indices.internal_data.output.full,
         ].cpu()
 
         data = self.post_processors(input_tensor)

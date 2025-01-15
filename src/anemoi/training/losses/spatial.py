@@ -14,6 +14,7 @@ import logging
 
 import torch
 import torch.fft
+
 from anemoi.training.losses.weightedloss import FunctionalWeightedLoss
 
 LOGGER = logging.getLogger(__name__)

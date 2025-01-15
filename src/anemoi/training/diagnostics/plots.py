@@ -407,7 +407,7 @@ def plot_predicted_multilevel_flat_sample(
     for plot_idx, (variable_idx, (variable_name, output_only)) in enumerate(parameters.items()):
         xt = x[..., variable_idx].squeeze() * int(output_only)
         if parameters_target is not None:
-            vidx = [i for _, (i, _) in parameters_target if i==variable_name]
+            vidx = [i for _, (i, _) in parameters_target if i == variable_name]
             yt = y_true[..., vidx].squeeze()
         else:
             yt = y_pred[..., variable_idx].squeeze()
@@ -686,10 +686,7 @@ def plot_flat_sample(
         else:
             single_plot(fig, ax[0], lon, lat, input_, norm=norm, title=f"{vname} input", datashader=datashader)
             vmin = combined_error.min()
-            if vmin==0:
-                vcenter = 1e-10
-            else:
-                vcenter=0
+            vcenter = 1e-10 if vmin == 0 else 0
             single_plot(
                 fig,
                 ax[4],
@@ -818,6 +815,7 @@ def get_scatter_frame(
         pc_lon,
         pc_lat,
         c=data,
+        cmap=cmap,
         cmap=cmap,
         s=5,
         alpha=1.0,
