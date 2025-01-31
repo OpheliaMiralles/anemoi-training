@@ -71,12 +71,12 @@ class FilteringLossWrapper(torch.nn.Module):
     def forward(self, pred: torch.Tensor, target: torch.Tensor, **kwargs) -> torch.Tensor:
         squash = kwargs.get("squash", True)
         if squash:
-            return self.loss(pred[..., self.predicted_indices], target[..., self.predicted_indices], **kwargs)
+            return self.loss(pred[..., self.predicted_indices], target[..., self.target_indices], **kwargs)
         len_model_output = pred.shape[-1]
         loss = torch.zeros(len_model_output, dtype=pred.dtype, device=pred.device, requires_grad=False)
         loss_per_variable = self.loss(
             pred[..., self.predicted_indices],
-            target[..., self.predicted_indices],
+            target[..., self.target_indices],
             **kwargs,
         )
         loss[self.predicted_indices] = loss_per_variable

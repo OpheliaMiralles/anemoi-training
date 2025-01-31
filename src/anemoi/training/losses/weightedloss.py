@@ -31,9 +31,10 @@ class BaseWeightedLoss(nn.Module, ABC):
     def __init__(
         self,
         node_weights: torch.Tensor,
+        time_weights: torch.Tensor = None,
         ignore_nans: bool = False,
     ) -> None:
-        """Node- and feature_weighted Loss.
+        """Node-/Time- and feature_weighted Loss.
 
         Exposes:
         - self.avg_function: torch.nanmean or torch.mean
@@ -41,13 +42,16 @@ class BaseWeightedLoss(nn.Module, ABC):
         depending on the value of `ignore_nans`
 
         Registers:
-        - self.node_weights: torch.Tensor of shape (N, )
+        - self.time_weights : torch.Tensor of shape (t, )
+        - self.node_weights: torch.Tensor of shape (lat*lon, )
         - self.scalar: ScaleTensor modified with `add_scalar` and `update_scalar`
 
         Parameters
         ----------
-        node_weights : torch.Tensor of shape (N, )
+        node_weights : torch.Tensor of shape (lat*lon, )
             Weight of each node in the loss function
+        time_weights : torch.Tensor of shape (t, )
+            Weight of each time step in the loss function
         ignore_nans : bool, optional
             Allow nans in the loss and apply methods ignoring nans for measuring the loss, by default False
 
@@ -60,6 +64,7 @@ class BaseWeightedLoss(nn.Module, ABC):
         self.sum_function = torch.nansum if ignore_nans else torch.sum
 
         self.register_buffer("node_weights", node_weights, persistent=True)
+        self.register_buffer("time_weights", time_weights, persistent=True)
 
     @functools.wraps(ScaleTensor.add_scalar, assigned=("__doc__", "__annotations__"))
     def add_scalar(self, dimension: int | tuple[int], scalar: torch.Tensor, *, name: str | None = None) -> None:
@@ -81,7 +86,7 @@ class BaseWeightedLoss(nn.Module, ABC):
         Parameters
         ----------
         x : torch.Tensor
-            Tensor to be scaled, shape (bs, ensemble, lat*lon, n_outputs)
+            Tensor to be scaled, shape (bs, t, ensemble, lat*lon, n_outputs)
         subset_indices: tuple[int,...], optional
             Indices to subset the calculated scalar and `x` tensor with, by default None.
         without_scalars: list[str] | list[int] | None, optional
@@ -130,6 +135,8 @@ class BaseWeightedLoss(nn.Module, ABC):
         torch.Tensor
             Scaled error tensor
         """
+        if self.node_weights.device != x.device:
+            self.node_weights = self.node_weights.to(x.device)
         # Squash by last dimension
         if squash:
             x = self.avg_function(x, dim=-1)
@@ -143,6 +150,27 @@ class BaseWeightedLoss(nn.Module, ABC):
         # keep last dimension (variables) when summing weights
         x /= self.sum_function(self.node_weights[..., None].expand_as(x), dim=(0, 1, 2))
         return self.sum_function(x, dim=(0, 1, 2))
+
+    def scale_by_time_weights(self, x: torch.Tensor) -> torch.Tensor:
+        """Scale a tensor by the time_weights.
+
+        Parameters
+        ----------
+        x : torch.Tensor
+            Tensor to be scaled, shape (bs, ensemble, lat*lon, n_outputs)
+
+        Returns
+        -------
+        torch.Tensor
+            Scaled error tensor
+        """
+        if self.time_weights is None:
+            return x
+        if self.time_weights.device != x.device:
+            self.time_weights = self.time_weights.to(x.device)
+        x *= self.time_weights[..., None].expand_as(x)
+        x /= self.sum_function(self.time_weights[..., None].expand_as(x), dim=(0))
+        return x
 
     @abstractmethod
     def forward(
@@ -176,9 +204,8 @@ class BaseWeightedLoss(nn.Module, ABC):
             Weighted loss
         """
         out = pred - target
-
         out = self.scale(out, scalar_indices, without_scalars=without_scalars)
-
+        out = self.scale_by_time_weights(out)
         return self.scale_by_node_weights(out, squash)
 
     @property
@@ -205,9 +232,10 @@ class FunctionalWeightedLoss(BaseWeightedLoss):
     def __init__(
         self,
         node_weights: torch.Tensor,
+        time_weights: torch.Tensor = None,
         ignore_nans: bool = False,
     ) -> None:
-        super().__init__(node_weights, ignore_nans)
+        super().__init__(node_weights, time_weights, ignore_nans)
 
     @abstractmethod
     def calculate_difference(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
@@ -245,6 +273,6 @@ class FunctionalWeightedLoss(BaseWeightedLoss):
             Weighted loss
         """
         out = self.calculate_difference(pred, target)
-
         out = self.scale(out, scalar_indices, without_scalars=without_scalars)
+        out = self.scale_by_time_weights(out)
         return self.scale_by_node_weights(out, squash)

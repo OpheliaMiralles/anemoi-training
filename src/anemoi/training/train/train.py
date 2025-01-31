@@ -151,6 +151,7 @@ class AnemoiTrainer:
             "metadata": self.metadata,
             "statistics": self.datamodule.statistics,
             "supporting_arrays": self.supporting_arrays,
+            "relative_date_indices": self.datamodule.relative_date_indices,
         }
         train_module = importlib.import_module(
             getattr(self.config.training, "train_module", "anemoi.training.train.forecaster"),

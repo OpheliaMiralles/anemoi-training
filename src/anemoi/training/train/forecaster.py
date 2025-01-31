@@ -53,6 +53,7 @@ class GraphForecaster(pl.LightningModule):
         data_indices: IndexCollection,
         metadata: dict,
         supporting_arrays: dict,
+        relative_date_indices: dict,
     ) -> None:
         """Initialize graph neural network forecaster.
 
@@ -91,6 +92,7 @@ class GraphForecaster(pl.LightningModule):
         )
         self.config = config
         self.data_indices = data_indices
+        self.relative_date_indices = relative_date_indices
 
         self.save_hyperparameters()
 
@@ -246,13 +248,14 @@ class GraphForecaster(pl.LightningModule):
             node_weighting = instantiate(config.node_weights)
             node_weights = node_weighting.weights(self.graph_data)
             node_weights = self.output_mask.apply(node_weights, dim=0, fill_value=0.0)
-            kwargs["node_weights"] = node_weights
             if node_weights.dtype == torch.bool:
                 node_weights = node_weights / node_weights.sum()
-            import matplotlib.pyplot as plt
-
-            plt.scatter(self.graph_data["data"]["x"][:, 0], self.graph_data["data"]["x"][:, 1], c=node_weights)
-            plt.savefig(f"node_weights_{config.node_weights.node_attribute}.png")
+            kwargs["node_weights"] = node_weights
+        
+        if config.get("time_weights", None) is not None:
+            time_weights = instantiate(config.time_weights)
+            time_weights = time_weights.weights(self.relative_date_indices)
+            kwargs["time_weights"] = time_weights
 
         loss_function = instantiate(config, **kwargs)
 
@@ -288,8 +291,8 @@ class GraphForecaster(pl.LightningModule):
                 if hasattr(pre_processor, "transform_loss_mask") and found_loss_mask_training:
                     loss_weights_mask = pre_processor.transform_loss_mask(loss_weights_mask)
             # update scaler with loss_weights_mask retrieved from preprocessors
-            self.loss.update_scalar(scalar=loss_weights_mask.cpu(), name="loss_weights_mask")
-            self.scalars["loss_weights_mask"] = ((-2, -1), loss_weights_mask.cpu())
+            self.loss.update_scalar(scalar=loss_weights_mask.to(self.device), name="loss_weights_mask")
+            self.scalars["loss_weights_mask"] = ((-2, -1), loss_weights_mask.to(self.device))
 
         self.updated_loss_mask = True
 

@@ -9,6 +9,7 @@
 
 
 import logging
+from einops import rearrange
 from collections.abc import Mapping
 from operator import itemgetter
 
@@ -35,6 +36,7 @@ class GraphInterpolator(GraphForecaster):
         data_indices: IndexCollection,
         metadata: dict,
         supporting_arrays: dict,
+        relative_date_indices: dict,
     ) -> None:
         """Initialize graph neural network interpolator.
 
@@ -59,15 +61,24 @@ class GraphInterpolator(GraphForecaster):
             data_indices=data_indices,
             metadata=metadata,
             supporting_arrays=supporting_arrays,
+            relative_date_indices=relative_date_indices,
         )
         self.known_future_variables = itemgetter(*config.training.known_future_variables)(
             data_indices.data.input.name_to_index,
         )
         if isinstance(self.known_future_variables, int):
             self.known_future_variables = [self.known_future_variables]
-        self.boundary_times = config.training.explicit_times.input
-        self.interp_times = config.training.explicit_times.target
-        sorted_indices = sorted(set(self.boundary_times + self.interp_times))
+        self.multi_step = getattr(self.config["training"], "multistep_input", 1)
+        boundary_times = config.training.explicit_times.input
+        self.boundary_times = [t + self.multi_step - 1 for t in boundary_times]
+        interp_times = config.training.explicit_times.target
+        self.interp_times = [t + self.multi_step - 1 for t in interp_times]
+        sorted_indices = sorted(
+            set(range(self.multi_step)).union(
+                self.boundary_times,
+                self.interp_times,
+            )
+        )
         self.imap = {data_index: batch_index for batch_index, data_index in enumerate(sorted_indices)}
 
     def _step(
@@ -84,7 +95,8 @@ class GraphInterpolator(GraphForecaster):
 
         batch = self.model.pre_processors(batch)
         present, future = itemgetter(*self.boundary_times)(self.imap)
-        x_init = batch[:, present][..., self.data_indices.data.input.full]
+        x_init = batch[:, : self.multi_step][..., self.data_indices.data.input.full]
+        x_init = rearrange(x_init, "batch time ens grid var -> batch ens grid (var time)")
         x_future = batch[:, future][..., self.known_future_variables]  # adding future known vars to the input
         x_bound = torch.cat([x_init, x_future], dim=-1)
         kfv = self.known_future_variables
@@ -96,12 +108,14 @@ class GraphInterpolator(GraphForecaster):
             device=self.device,
             dtype=batch.dtype,
         )
+        time_weights = self.loss.losses[0].loss.time_weights
         for interp_step in self.interp_times:
+            # update time weights in loss function for this specific case
+            for l in self.loss.losses:
+                l.loss.time_weights = time_weights[self.imap[interp_step]]
             # get the forcing information for the target interpolation time:
             target_forcing[..., : len(kfv)] = batch[:, self.imap[interp_step], :, :, kfv]
-            target_forcing[..., -1] = (interp_step - self.boundary_times[1]) / (
-                self.boundary_times[1] - self.boundary_times[0]
-            )
+            target_forcing[..., -1] = (interp_step - future) / (future - present)
             x_with_intermediate_forcings = torch.cat([x_bound, target_forcing], dim=-1).unsqueeze(dim=1)
             y_pred = self(x_with_intermediate_forcings)
             y = batch[:, self.imap[interp_step], ...]

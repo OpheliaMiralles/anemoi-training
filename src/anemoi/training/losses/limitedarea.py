@@ -31,6 +31,7 @@ class WeightedMSELossLimitedArea(BaseWeightedLoss):
     def __init__(
         self,
         node_weights: torch.Tensor,
+        time_weights: torch.Tensor = None,
         inside_lam: bool = True,
         wmse_contribution: bool = False,
         ignore_nans: bool = False,
@@ -40,8 +41,10 @@ class WeightedMSELossLimitedArea(BaseWeightedLoss):
 
         Parameters
         ----------
-        node_weights : torch.Tensor of shape (N, )
+        node_weights : torch.Tensor of shape (lat*lon, )
             Weight of each node in the loss function
+        time_weights : torch.Tensor of shape (t, )
+            Weight of each time step in the loss function
         mask: torch.Tensor
             the mask marking the indices of the regional data points (bool)
         inside_lam: bool
@@ -53,6 +56,7 @@ class WeightedMSELossLimitedArea(BaseWeightedLoss):
         """
         super().__init__(
             node_weights=node_weights,
+            time_weights=time_weights,
             ignore_nans=ignore_nans,
             **kwargs,
         )
@@ -101,9 +105,7 @@ class WeightedMSELossLimitedArea(BaseWeightedLoss):
 
         if not self.wmse_contribution:
             self.node_weights *= limited_area_mask[0, 0, :, 0]
-
         out *= limited_area_mask
-
         out = self.scale(out, scalar_indices, without_scalars=["limited_area_mask"])
-
+        out = self.scale_by_time_weights(out)
         return self.scale_by_node_weights(out, squash)

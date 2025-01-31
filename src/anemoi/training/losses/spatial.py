@@ -44,9 +44,10 @@ class LogSpectralDistance(FunctionalWeightedLoss):
     def __init__(
         self,
         node_weights: torch.Tensor,
+        time_weights: torch.Tensor = None,
         ignore_nans: bool = False,
     ) -> None:
-        super().__init__(node_weights, ignore_nans)
+        super().__init__(node_weights, time_weights, ignore_nans)
 
     def calculate_difference(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         return log_spectral_distance(pred, target)
@@ -61,4 +62,4 @@ class LogSpectralDistance(FunctionalWeightedLoss):
         without_scalars: list[str] | list[int] | None = None,
     ) -> torch.Tensor:
         result = super().forward(pred, target, squash, scalar_indices=scalar_indices, without_scalars=without_scalars)
-        return torch.sqrt(torch.mean(result))
+        return torch.sqrt(torch.mean(result)) / 10

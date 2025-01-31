@@ -27,6 +27,7 @@ class WeightedMAELoss(BaseWeightedLoss):
     def __init__(
         self,
         node_weights: torch.Tensor,
+        time_weights: torch.Tensor = None,
         ignore_nans: bool = False,
         **kwargs,
     ) -> None:
@@ -36,14 +37,17 @@ class WeightedMAELoss(BaseWeightedLoss):
 
         Parameters
         ----------
-        node_weights : torch.Tensor of shape (N, )
+        node_weights : torch.Tensor of shape (lat*lon, )
             Weight of each node in the loss function
+        time_weights : torch.Tensor of shape (t, )
+            Weight of each time step in the loss function
         ignore_nans : bool, optional
             Allow nans in the loss and apply methods ignoring nans for measuring the loss, by default False
 
         """
         super().__init__(
             node_weights=node_weights,
+            time_weights=time_weights,
             ignore_nans=ignore_nans,
             **kwargs,
         )
@@ -80,4 +84,5 @@ class WeightedMAELoss(BaseWeightedLoss):
         """
         out = torch.abs(pred - target)
         out = self.scale(out, scalar_indices, without_scalars=without_scalars)
+        out = self.scale_by_time_weights(out)
         return self.scale_by_node_weights(out, squash)

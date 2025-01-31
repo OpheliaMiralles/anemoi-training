@@ -17,8 +17,13 @@ from typing import Any
 
 import numpy as np
 import pytorch_lightning as pl
+from hydra.utils import instantiate
+from omegaconf import DictConfig, OmegaConf
+from torch.utils.data import DataLoader
+
 from anemoi.datasets.data import open_dataset
 from anemoi.models.data_indices.collection import IndexCollection
+from anemoi.training.data.dataset import NativeGridDataset, worker_init_func
 from anemoi.utils.dates import frequency_to_seconds
 from hydra.utils import instantiate
 from omegaconf import DictConfig
@@ -115,8 +120,15 @@ class AnemoiDatasetsDataModule(pl.LightningDataModule):
     @cached_property
     def relative_date_indices(self) -> list:
         """Determine a list of relative time indices to load for each batch."""
+        multi_step = getattr(self.config.training, "multistep_input", 1)
+
         if hasattr(self.config.training, "explicit_times"):
-            return sorted(set(self.config.training.explicit_times.input + self.config.training.explicit_times.target))
+            return sorted(
+                set(range(multi_step)).union(
+                    [t + multi_step - 1 for t in self.config.training.explicit_times.input],
+                    [t + multi_step - 1 for t in self.config.training.explicit_times.target],
+                )
+            )
 
         # uses the old default of multistep, timeincrement and rollout.
         # Use the maximum rollout to be expected
@@ -128,7 +140,6 @@ class AnemoiDatasetsDataModule(pl.LightningDataModule):
         # NOTE: --> for gradual rollout, max rollout dates is always fetched.
         # But this was always the case in datamodule.py
 
-        multi_step = self.config.training.multistep_input
         return [self.timeincrement * mstep for mstep in range(multi_step + rollout)]
 
     def add_model_run_ids(self, data_reader: Any) -> Any:

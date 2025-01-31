@@ -138,6 +138,7 @@ def plot_power_spectrum(
     y_true: np.ndarray,
     y_pred: np.ndarray,
     min_delta: float | None = None,
+    parameters_target: dict[str, int] | None = None,
 ) -> Figure:
     """Plots power spectrum.
 
@@ -158,6 +159,9 @@ def plot_power_spectrum(
         Predicted data of shape (lat*lon, nvar*level)
     min_delta: float, optional
         Minimum distance between lat/lon points, if None defaulted to 1km
+    parameters_target : dict, optional
+        Dictionary of target variable names and indices, by default None. In case
+        output, input and target variables are different.
 
     Returns
     -------
@@ -197,6 +201,12 @@ def plot_power_spectrum(
     grid_pc_lon, grid_pc_lat = np.meshgrid(regular_pc_lon, regular_pc_lat)
 
     for plot_idx, (variable_idx, (variable_name, output_only)) in enumerate(parameters.items()):
+        variable_batch_index = (
+            [k for k, (i, _) in parameters_target.items() if i == variable_name] if parameters_target else variable_idx
+        )
+        yt = y_true[..., variable_batch_index].squeeze()
+        if output_only:
+            xt = x[..., variable_batch_index].squeeze()
         yt = y_true[..., variable_idx].squeeze()
         yp = y_pred[..., variable_idx].squeeze()
 
@@ -276,6 +286,7 @@ def plot_histogram(
     y_true: np.ndarray,
     y_pred: np.ndarray,
     precip_and_related_fields: list | None = None,
+    parameters_target: dict[str, int] | None = None,
 ) -> Figure:
     """Plots histogram.
 
@@ -294,6 +305,9 @@ def plot_histogram(
         Predicted data of shape (lat*lon, nvar*level)
     precip_and_related_fields : list, optional
         List of precipitation-like variables, by default []
+    parameters_target : dict, optional
+        Dictionary of target variable names and indices, by default None. In case
+        output, input and target variables are different.
 
     Returns
     -------
@@ -306,32 +320,52 @@ def plot_histogram(
     n_plots_x, n_plots_y = len(parameters), 1
 
     figsize = (n_plots_y * 4, n_plots_x * 3)
-    fig, ax = plt.subplots(n_plots_x, n_plots_y, figsize=figsize, layout=LAYOUT)
+    fig, ax = plt.subplots(n_plots_x,
+                           n_plots_y,
+                           figsize=figsize,
+                           layout=LAYOUT)
     if n_plots_x == 1:
         ax = [ax]
 
-    for plot_idx, (variable_idx, (variable_name, output_only)) in enumerate(parameters.items()):
-        yt = y_true[..., variable_idx].squeeze()
+    for plot_idx, (variable_idx,
+                   (variable_name,
+                    output_only)) in enumerate(parameters.items()):
+        variable_batch_index = ([
+            k for k, (i, _) in parameters_target.items() if i == variable_name
+        ] if parameters_target else variable_idx)
+        yt = y_true[..., variable_batch_index].squeeze()
         yp = y_pred[..., variable_idx].squeeze()
         # postprocessed outputs so we need to handle possible NaNs
 
         # Calculate the histogram and handle NaNs
         if output_only:
             # histogram of true increment and predicted increment
-            xt = x[..., variable_idx].squeeze() * int(output_only)
+            xt = x[..., variable_batch_index].squeeze() * int(output_only)
             yt_xt = yt - xt
             yp_xt = yp - xt
             # enforce the same binning for both histograms
             bin_min = min(np.nanmin(yt_xt), np.nanmin(yp_xt))
             bin_max = max(np.nanmax(yt_xt), np.nanmax(yp_xt))
-            hist_yt, bins_yt = np.histogram(yt_xt[~np.isnan(yt_xt)], bins=100, density=True, range=[bin_min, bin_max])
-            hist_yp, bins_yp = np.histogram(yp_xt[~np.isnan(yp_xt)], bins=100, density=True, range=[bin_min, bin_max])
+            hist_yt, bins_yt = np.histogram(yt_xt[~np.isnan(yt_xt)],
+                                            bins=100,
+                                            density=True,
+                                            range=[bin_min, bin_max])
+            hist_yp, bins_yp = np.histogram(yp_xt[~np.isnan(yp_xt)],
+                                            bins=100,
+                                            density=True,
+                                            range=[bin_min, bin_max])
         else:
             # enforce the same binning for both histograms
             bin_min = min(np.nanmin(yt), np.nanmin(yp))
             bin_max = max(np.nanmax(yt), np.nanmax(yp))
-            hist_yt, bins_yt = np.histogram(yt[~np.isnan(yt)], bins=100, density=True, range=[bin_min, bin_max])
-            hist_yp, bins_yp = np.histogram(yp[~np.isnan(yp)], bins=100, density=True, range=[bin_min, bin_max])
+            hist_yt, bins_yt = np.histogram(yt[~np.isnan(yt)],
+                                            bins=100,
+                                            density=True,
+                                            range=[bin_min, bin_max])
+            hist_yp, bins_yp = np.histogram(yp[~np.isnan(yp)],
+                                            bins=100,
+                                            density=True,
+                                            range=[bin_min, bin_max])
 
         # Visualization trick for tp
         if variable_name in precip_and_related_fields:
@@ -339,8 +373,18 @@ def plot_histogram(
             hist_yt = hist_yt * bins_yt[:-1]
             hist_yp = hist_yp * bins_yp[:-1]
         # Plot the modified histogram
-        ax[plot_idx].bar(bins_yt[:-1], hist_yt, width=np.diff(bins_yt), color="blue", alpha=0.7, label="Truth (data)")
-        ax[plot_idx].bar(bins_yp[:-1], hist_yp, width=np.diff(bins_yp), color="red", alpha=0.7, label="Predicted")
+        ax[plot_idx].bar(bins_yt[:-1],
+                         hist_yt,
+                         width=np.diff(bins_yt),
+                         color="blue",
+                         alpha=0.7,
+                         label="Truth (data)")
+        ax[plot_idx].bar(bins_yp[:-1],
+                         hist_yp,
+                         width=np.diff(bins_yp),
+                         color="red",
+                         alpha=0.7,
+                         label="Predicted")
 
         ax[plot_idx].set_title(variable_name)
         ax[plot_idx].set_xlabel(variable_name)
@@ -391,6 +435,9 @@ def plot_predicted_multilevel_flat_sample(
         Scatter plot, by default False
     precip_and_related_fields : list, optional
         List of precipitation-like variables, by default []
+    parameters_target : dict, optional
+        Dictionary of target variable names and indices, by default None. In case
+        output, input and target variables are different.
 
     Returns
     -------
@@ -405,12 +452,11 @@ def plot_predicted_multilevel_flat_sample(
 
     pc_lat, pc_lon = equirectangular_projection(latlons)
     for plot_idx, (variable_idx, (variable_name, output_only)) in enumerate(parameters.items()):
-        xt = x[..., variable_idx].squeeze() * int(output_only)
-        if parameters_target is not None:
-            vidx = [i for _, (i, _) in parameters_target if i == variable_name]
-            yt = y_true[..., vidx].squeeze()
-        else:
-            yt = y_pred[..., variable_idx].squeeze()
+        variable_batch_index = (
+            [k for k, (i, _) in parameters_target.items() if i == variable_name] if parameters_target else variable_idx
+        )
+        yt = y_true[..., variable_batch_index].squeeze()
+        xt = x[..., variable_batch_index].squeeze() * int(output_only)
         yp = y_pred[..., variable_idx].squeeze()
         if n_plots_x > 1:
             plot_flat_sample(
@@ -588,8 +634,8 @@ def plot_flat_sample(
         # For 'errors', only persistence and increments need identical colorbar-limits
         combined_error = np.concatenate(((pred - input_), (truth - input_)))
         norm = Normalize(vmin=np.nanmin(combined_data), vmax=np.nanmax(combined_data))
-        single_plot(fig, ax[1], lon, lat, truth, norm=norm, title=f"{vname} target", datashader=datashader)
-        single_plot(fig, ax[2], lon, lat, pred, norm=norm, title=f"{vname} pred", datashader=datashader)
+        single_plot(fig, ax[1], lon, lat, truth, title=f"{vname} target", datashader=datashader)
+        single_plot(fig, ax[2], lon, lat, pred, title=f"{vname} pred", datashader=datashader)
         single_plot(
             fig,
             ax[3],
@@ -657,6 +703,7 @@ def plot_flat_sample(
                 lon=lon,
                 lat=lat,
                 data=input_,
+                norm=norm,
                 cmap=precip_colormap,
                 title=f"{vname} input",
                 datashader=datashader,
@@ -684,7 +731,7 @@ def plot_flat_sample(
                 datashader=datashader,
             )
         else:
-            single_plot(fig, ax[0], lon, lat, input_, norm=norm, title=f"{vname} input", datashader=datashader)
+            single_plot(fig, ax[0], lon, lat, input_, title=f"{vname} input", datashader=datashader)
             vmin = combined_error.min()
             vcenter = 1e-10 if vmin == 0 else 0
             single_plot(
@@ -815,7 +862,6 @@ def get_scatter_frame(
         pc_lon,
         pc_lat,
         c=data,
-        cmap=cmap,
         cmap=cmap,
         s=5,
         alpha=1.0,

@@ -26,6 +26,7 @@ class WeightedHuberLoss(BaseWeightedLoss):
     def __init__(
         self,
         node_weights: torch.Tensor,
+        time_weights: torch.Tensor = None,
         delta: float = 1.0,
         ignore_nans: bool = False,
         **kwargs,
@@ -36,8 +37,10 @@ class WeightedHuberLoss(BaseWeightedLoss):
 
         Parameters
         ----------
-        node_weights : torch.Tensor of shape (N, )
+        node_weights : torch.Tensor of shape (lat*lon, )
             Weight of each node in the loss function
+        time_weights : torch.Tensor of shape (t, )
+            Weight of each time step in the loss function
         delta : float, optional
             Threshold for Huber loss, by default 1.0
         ignore_nans : bool, optional
@@ -45,6 +48,7 @@ class WeightedHuberLoss(BaseWeightedLoss):
         """
         super().__init__(
             node_weights=node_weights,
+            time_weights=time_weights,
             ignore_nans=ignore_nans,
             **kwargs,
         )
@@ -100,5 +104,5 @@ class WeightedHuberLoss(BaseWeightedLoss):
         out = self.huber(pred, target)
 
         out = self.scale(out, scalar_indices, without_scalars=without_scalars)
-
+        out = self.scale_by_time_weights(out)
         return self.scale_by_node_weights(out, squash)
