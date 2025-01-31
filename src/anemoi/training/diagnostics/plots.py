@@ -320,19 +320,14 @@ def plot_histogram(
     n_plots_x, n_plots_y = len(parameters), 1
 
     figsize = (n_plots_y * 4, n_plots_x * 3)
-    fig, ax = plt.subplots(n_plots_x,
-                           n_plots_y,
-                           figsize=figsize,
-                           layout=LAYOUT)
+    fig, ax = plt.subplots(n_plots_x, n_plots_y, figsize=figsize, layout=LAYOUT)
     if n_plots_x == 1:
         ax = [ax]
 
-    for plot_idx, (variable_idx,
-                   (variable_name,
-                    output_only)) in enumerate(parameters.items()):
-        variable_batch_index = ([
-            k for k, (i, _) in parameters_target.items() if i == variable_name
-        ] if parameters_target else variable_idx)
+    for plot_idx, (variable_idx, (variable_name, output_only)) in enumerate(parameters.items()):
+        variable_batch_index = (
+            [k for k, (i, _) in parameters_target.items() if i == variable_name] if parameters_target else variable_idx
+        )
         yt = y_true[..., variable_batch_index].squeeze()
         yp = y_pred[..., variable_idx].squeeze()
         # postprocessed outputs so we need to handle possible NaNs
@@ -346,26 +341,14 @@ def plot_histogram(
             # enforce the same binning for both histograms
             bin_min = min(np.nanmin(yt_xt), np.nanmin(yp_xt))
             bin_max = max(np.nanmax(yt_xt), np.nanmax(yp_xt))
-            hist_yt, bins_yt = np.histogram(yt_xt[~np.isnan(yt_xt)],
-                                            bins=100,
-                                            density=True,
-                                            range=[bin_min, bin_max])
-            hist_yp, bins_yp = np.histogram(yp_xt[~np.isnan(yp_xt)],
-                                            bins=100,
-                                            density=True,
-                                            range=[bin_min, bin_max])
+            hist_yt, bins_yt = np.histogram(yt_xt[~np.isnan(yt_xt)], bins=100, density=True, range=[bin_min, bin_max])
+            hist_yp, bins_yp = np.histogram(yp_xt[~np.isnan(yp_xt)], bins=100, density=True, range=[bin_min, bin_max])
         else:
             # enforce the same binning for both histograms
             bin_min = min(np.nanmin(yt), np.nanmin(yp))
             bin_max = max(np.nanmax(yt), np.nanmax(yp))
-            hist_yt, bins_yt = np.histogram(yt[~np.isnan(yt)],
-                                            bins=100,
-                                            density=True,
-                                            range=[bin_min, bin_max])
-            hist_yp, bins_yp = np.histogram(yp[~np.isnan(yp)],
-                                            bins=100,
-                                            density=True,
-                                            range=[bin_min, bin_max])
+            hist_yt, bins_yt = np.histogram(yt[~np.isnan(yt)], bins=100, density=True, range=[bin_min, bin_max])
+            hist_yp, bins_yp = np.histogram(yp[~np.isnan(yp)], bins=100, density=True, range=[bin_min, bin_max])
 
         # Visualization trick for tp
         if variable_name in precip_and_related_fields:
@@ -373,18 +356,8 @@ def plot_histogram(
             hist_yt = hist_yt * bins_yt[:-1]
             hist_yp = hist_yp * bins_yp[:-1]
         # Plot the modified histogram
-        ax[plot_idx].bar(bins_yt[:-1],
-                         hist_yt,
-                         width=np.diff(bins_yt),
-                         color="blue",
-                         alpha=0.7,
-                         label="Truth (data)")
-        ax[plot_idx].bar(bins_yp[:-1],
-                         hist_yp,
-                         width=np.diff(bins_yp),
-                         color="red",
-                         alpha=0.7,
-                         label="Predicted")
+        ax[plot_idx].bar(bins_yt[:-1], hist_yt, width=np.diff(bins_yt), color="blue", alpha=0.7, label="Truth (data)")
+        ax[plot_idx].bar(bins_yp[:-1], hist_yp, width=np.diff(bins_yp), color="red", alpha=0.7, label="Predicted")
 
         ax[plot_idx].set_title(variable_name)
         ax[plot_idx].set_xlabel(variable_name)

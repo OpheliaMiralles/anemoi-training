@@ -17,13 +17,8 @@ from typing import Any
 
 import numpy as np
 import pytorch_lightning as pl
-from hydra.utils import instantiate
-from omegaconf import DictConfig, OmegaConf
-from torch.utils.data import DataLoader
-
 from anemoi.datasets.data import open_dataset
 from anemoi.models.data_indices.collection import IndexCollection
-from anemoi.training.data.dataset import NativeGridDataset, worker_init_func
 from anemoi.utils.dates import frequency_to_seconds
 from hydra.utils import instantiate
 from omegaconf import DictConfig
@@ -127,7 +122,7 @@ class AnemoiDatasetsDataModule(pl.LightningDataModule):
                 set(range(multi_step)).union(
                     [t + multi_step - 1 for t in self.config.training.explicit_times.input],
                     [t + multi_step - 1 for t in self.config.training.explicit_times.target],
-                )
+                ),
             )
 
         # uses the old default of multistep, timeincrement and rollout.

@@ -27,7 +27,6 @@ class CombinedLoss(torch.nn.Module):
         self,
         losses: Sequence[torch.nn.Module],
         loss_weights: tuple[int, ...],
-        **kwargs,
     ):
         """Combined loss function.
 
@@ -106,10 +105,10 @@ class CombinedLoss(torch.nn.Module):
         loss = None
         for i, loss_fn in enumerate(self.losses):
             sub_loss = self.loss_weights[i] * loss_fn(
-                    pred,
-                    target,
-                    **kwargs,
-                )
+                pred,
+                target,
+                **kwargs,
+            )
             if loss is not None:
                 loss += sub_loss.expand_as(loss)
             else:

@@ -251,7 +251,7 @@ class GraphForecaster(pl.LightningModule):
             if node_weights.dtype == torch.bool:
                 node_weights = node_weights / node_weights.sum()
             kwargs["node_weights"] = node_weights
-        
+
         if config.get("time_weights", None) is not None:
             time_weights = instantiate(config.time_weights)
             time_weights = time_weights.weights(self.relative_date_indices)

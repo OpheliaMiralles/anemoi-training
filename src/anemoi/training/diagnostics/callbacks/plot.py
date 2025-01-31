@@ -1093,11 +1093,11 @@ class PlotSpectrum(BasePlotAdditionalMetrics):
                 for name in self.parameters
             }
             plot_parameters_target_dict = {
-            pl_module.data_indices.data.output.name_to_index[name]: (
-                name,
-                name not in diagnostics,
-            )
-            for name in self.parameters
+                pl_module.data_indices.data.output.name_to_index[name]: (
+                    name,
+                    name not in diagnostics,
+                )
+                for name in self.parameters
             }
 
             fig = plot_power_spectrum(
@@ -1107,7 +1107,7 @@ class PlotSpectrum(BasePlotAdditionalMetrics):
                 data[rollout_step + 1, ...].squeeze(),
                 output_tensor[rollout_step, ...],
                 min_delta=self.min_delta,
-                parameters_target=plot_parameters_target_dict
+                parameters_target=plot_parameters_target_dict,
             )
 
             self._output_figure(
@@ -1206,8 +1206,6 @@ class PlotHistogram(BasePlotAdditionalMetrics):
                 logger,
                 fig,
                 epoch=epoch,
-                tag=
-                f"gnn_pred_val_histo_rstep_{rollout_step:02d}_batch{batch_idx:04d}_rank0",
-                exp_log_tag=
-                f"val_pred_histo_rstep_{rollout_step:02d}_rank{local_rank:01d}",
+                tag=f"gnn_pred_val_histo_rstep_{rollout_step:02d}_batch{batch_idx:04d}_rank0",
+                exp_log_tag=f"val_pred_histo_rstep_{rollout_step:02d}_rank{local_rank:01d}",
             )

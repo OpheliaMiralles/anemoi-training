@@ -9,12 +9,12 @@
 
 
 import logging
-from einops import rearrange
 from collections.abc import Mapping
 from operator import itemgetter
 
 import torch
 from anemoi.models.data_indices.collection import IndexCollection
+from einops import rearrange
 from omegaconf import DictConfig
 from torch.utils.checkpoint import checkpoint
 from torch_geometric.data import HeteroData
@@ -77,7 +77,7 @@ class GraphInterpolator(GraphForecaster):
             set(range(self.multi_step)).union(
                 self.boundary_times,
                 self.interp_times,
-            )
+            ),
         )
         self.imap = {data_index: batch_index for batch_index, data_index in enumerate(sorted_indices)}
 
@@ -111,8 +111,8 @@ class GraphInterpolator(GraphForecaster):
         time_weights = self.loss.losses[0].loss.time_weights
         for interp_step in self.interp_times:
             # update time weights in loss function for this specific case
-            for l in self.loss.losses:
-                l.loss.time_weights = time_weights[self.imap[interp_step]]
+            for specific_loss in self.loss.losses:
+                specific_loss.loss.time_weights = time_weights[self.imap[interp_step]]
             # get the forcing information for the target interpolation time:
             target_forcing[..., : len(kfv)] = batch[:, self.imap[interp_step], :, :, kfv]
             target_forcing[..., -1] = (interp_step - future) / (future - present)

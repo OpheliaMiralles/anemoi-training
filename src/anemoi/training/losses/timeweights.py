@@ -11,8 +11,6 @@
 import logging
 
 import torch
-from anemoi.graphs.nodes.attributes import AreaWeights
-from torch_geometric.data import HeteroData
 
 LOGGER = logging.getLogger(__name__)
 
@@ -63,15 +61,15 @@ class LeadTimeDecayWeight:
         """
         if self.method == "exponential":
             return torch.exp(-self.decay_factor * torch.tensor(relative_date_indices))
-        elif self.method == "linear":
+        if self.method == "linear":
             return (
                 1
                 - (1 - self.decay_factor)
                 * torch.tensor(relative_date_indices)
                 / torch.tensor(relative_date_indices).max()
             )
-        else:
-            raise ValueError(f"Method {self.method} not supported")
+        msg = f"Method {self.method} not supported"
+        raise NotImplementedError(msg)
 
     def backward_weights(self, relative_date_indices: list[int]) -> torch.Tensor:
         """Returns weight of type self.node_attribute for nodes self.target.
@@ -91,14 +89,14 @@ class LeadTimeDecayWeight:
         """
         if self.method == "exponential":
             return torch.exp(self.decay_factor * torch.tensor(relative_date_indices))
-        elif self.method == "linear":
+        if self.method == "linear":
             return (
                 (1 - self.decay_factor)
                 * torch.tensor(relative_date_indices)
                 / torch.tensor(relative_date_indices).max()
             )
-        else:
-            raise ValueError(f"Method {self.method} not supported")
+        msg = f"Method {self.method} not supported"
+        raise NotImplementedError(msg)
 
     def weights(self, relative_date_indices: list[int]) -> torch.Tensor:
         """Returns weight of type self.node_attribute for nodes self.target.
@@ -118,5 +116,4 @@ class LeadTimeDecayWeight:
         """
         if self.inverse:
             return self.backward_weights(relative_date_indices)
-        else:
-            return self.forward_weights(relative_date_indices)
+        return self.forward_weights(relative_date_indices)
