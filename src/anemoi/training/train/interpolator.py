@@ -134,7 +134,7 @@ class GraphInterpolator(GraphForecaster):
             y_preds.extend(y_pred)
 
         loss *= 1.0 / len(self.interp_times)
-        
+
         for specific_loss in self.loss.losses:
             specific_loss.loss.time_weights = original_weights[specific_loss]
         return loss, metrics, y_preds
