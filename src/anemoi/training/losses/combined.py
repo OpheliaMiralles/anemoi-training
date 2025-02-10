@@ -27,6 +27,7 @@ class CombinedLoss(torch.nn.Module):
         self,
         losses: Sequence[torch.nn.Module],
         loss_weights: tuple[int, ...],
+        **kwargs,
     ):
         """Combined loss function.
 

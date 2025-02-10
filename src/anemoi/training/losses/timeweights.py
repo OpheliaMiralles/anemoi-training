@@ -88,7 +88,7 @@ class LeadTimeDecayWeight:
             weight of target nodes
         """
         if self.method == "exponential":
-            return torch.exp(self.decay_factor * torch.tensor(relative_date_indices))
+            return 1 - torch.exp(-self.decay_factor * torch.tensor(relative_date_indices))
         if self.method == "linear":
             return (
                 (1 - self.decay_factor)

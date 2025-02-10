@@ -166,6 +166,8 @@ class BaseWeightedLoss(nn.Module, ABC):
         """
         if self.time_weights is None:
             return x
+        if self.time_weights.shape != x.shape[1:]:
+            return x
         if self.time_weights.device != x.device:
             self.time_weights = self.time_weights.to(x.device)
         x *= self.time_weights[..., None].expand_as(x)
