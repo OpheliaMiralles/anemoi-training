@@ -29,7 +29,7 @@ class LeadTimeDecayWeight:
         Load time weight attribute.
     """
 
-    def __init__(self, decay_factor: float = 0.1, method: str = "exponential", inverse: bool = False):
+    def __init__(self, decay_factor: float = 0.15, method: str = "linear", inverse: bool = False):
         """Initialize graph node attribute with target nodes and node attribute.
 
         Parameters
@@ -63,10 +63,7 @@ class LeadTimeDecayWeight:
             return torch.exp(-self.decay_factor * torch.tensor(relative_date_indices))
         if self.method == "linear":
             return (
-                1
-                - (1 - self.decay_factor)
-                * torch.tensor(relative_date_indices)
-                / torch.tensor(relative_date_indices).max()
+                1 - self.decay_factor * torch.tensor(relative_date_indices) / torch.tensor(relative_date_indices).max()
             )
         msg = f"Method {self.method} not supported"
         raise NotImplementedError(msg)
@@ -90,11 +87,7 @@ class LeadTimeDecayWeight:
         if self.method == "exponential":
             return 1 - torch.exp(-self.decay_factor * torch.tensor(relative_date_indices))
         if self.method == "linear":
-            return (
-                (1 - self.decay_factor)
-                * torch.tensor(relative_date_indices)
-                / torch.tensor(relative_date_indices).max()
-            )
+            return self.decay_factor * torch.tensor(relative_date_indices) / torch.tensor(relative_date_indices).max()
         msg = f"Method {self.method} not supported"
         raise NotImplementedError(msg)
 

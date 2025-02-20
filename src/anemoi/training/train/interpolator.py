@@ -108,12 +108,23 @@ class GraphInterpolator(GraphForecaster):
             device=self.device,
             dtype=batch.dtype,
         )
-        time_weights = self.loss.losses[0].loss.time_weights.detach().clone()
-        original_weights = {specific_loss: specific_loss.loss.time_weights for specific_loss in self.loss.losses}
+        if hasattr(self.loss, "losses"):
+            time_weights = self.loss.losses[0].loss.time_weights
+            if time_weights is not None:
+                time_weights = time_weights.detach().clone()
+            original_weights = {specific_loss: specific_loss.loss.time_weights for specific_loss in self.loss.losses}
+        else:
+            time_weights = self.loss.loss.time_weights
+            if time_weights is not None:
+                time_weights = time_weights.detach().clone()
+            original_weights = {self.loss: self.loss.loss.time_weights}
         for interp_step in self.interp_times:
-            updated_time_weights = time_weights[self.imap[interp_step]].detach().clone()
+            if time_weights is not None:
+                updated_time_weights = time_weights[self.imap[interp_step]].detach().clone()
+            else:
+                updated_time_weights = None
             # update time weights in loss function for this specific case
-            for specific_loss in self.loss.losses:
+            for specific_loss in original_weights:
                 specific_loss.loss.time_weights = updated_time_weights
             # get the forcing information for the target interpolation time:
             target_forcing[..., : len(kfv)] = batch[:, self.imap[interp_step], :, :, kfv]
@@ -135,7 +146,7 @@ class GraphInterpolator(GraphForecaster):
 
         loss *= 1.0 / len(self.interp_times)
 
-        for specific_loss in self.loss.losses:
+        for specific_loss in original_weights:
             specific_loss.loss.time_weights = original_weights[specific_loss]
         return loss, metrics, y_preds
 

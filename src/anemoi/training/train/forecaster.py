@@ -470,9 +470,9 @@ class GraphForecaster(pl.LightningModule):
         # for validation not normalized in-place because remappers cannot be applied in-place
         batch = self.model.pre_processors(batch, in_place=not validation_mode)
 
-        if not self.updated_loss_mask:
-            # update loss scalar after first application and initialization of preprocessors
-            self.training_weights_for_imputed_variables(batch)
+        # if not self.updated_loss_mask:
+        #     # update loss scalar after first application and initialization of preprocessors
+        #     self.training_weights_for_imputed_variables(batch)
 
         # start rollout of preprocessed batch
         x = batch[
