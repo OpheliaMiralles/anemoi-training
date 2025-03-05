@@ -256,6 +256,10 @@ class GraphForecaster(pl.LightningModule):
             time_weights = instantiate(config.time_weights)
             time_weights = time_weights.weights(self.relative_date_indices)
             kwargs["time_weights"] = time_weights
+        
+        if config.get("x_dim", None) is not None and config.get("y_dim", None) is not None:
+            kwargs["x_dim"] = config.x_dim
+            kwargs["y_dim"] = config.y_dim
 
         loss_function = instantiate(config, **kwargs)
 

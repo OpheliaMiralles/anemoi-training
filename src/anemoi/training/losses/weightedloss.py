@@ -137,6 +137,8 @@ class BaseWeightedLoss(nn.Module, ABC):
         """
         if self.node_weights.device != x.device:
             self.node_weights = self.node_weights.to(x.device)
+        if self.node_weights.dtype != x.dtype:
+            self.node_weights = self.node_weights.to(x.dtype)
         # Squash by last dimension
         if squash:
             x = self.avg_function(x, dim=-1)
