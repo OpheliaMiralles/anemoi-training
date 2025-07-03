@@ -14,7 +14,6 @@ import logging
 
 import torch
 import torch.fft
-
 from anemoi.training.losses.huber import WeightedHuberLoss
 from anemoi.training.losses.weightedloss import BaseWeightedLoss, FunctionalWeightedLoss
 
@@ -179,6 +178,6 @@ class MultiLoss(BaseWeightedLoss):
             * torch.mean(
                 WeightedHuberLoss(node_weights=self.node_weights, time_weights=self.time_weights)(
                     pred, target, squash, scalar_indices=scalar_indices, without_scalars=without_scalars
-                ).to(dtype=target.dtype, device=target.device)
+                )
             )
         )

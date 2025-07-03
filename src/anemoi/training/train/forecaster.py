@@ -10,33 +10,29 @@
 
 import logging
 from collections import defaultdict
-from collections.abc import Generator
-from collections.abc import Mapping
-from typing import Optional
-from typing import Union
+from collections.abc import Generator, Mapping
+from typing import Optional, Union
 
 import numpy as np
 import pytorch_lightning as pl
 import torch
-from anemoi.models.data_indices.collection import IndexCollection
-from anemoi.models.interface import AnemoiModelInterface
-from anemoi.utils.config import DotDict
 from hydra.utils import instantiate
-from omegaconf import DictConfig
-from omegaconf import OmegaConf
+from omegaconf import DictConfig, OmegaConf
 from timm.scheduler import CosineLRScheduler
 from torch.distributed.distributed_c10d import ProcessGroup
 from torch.distributed.optim import ZeroRedundancyOptimizer
 from torch.utils.checkpoint import checkpoint
 from torch_geometric.data import HeteroData
 
-from anemoi.training.losses.combined import CombinedLoss
+from anemoi.models.data_indices.collection import IndexCollection
+from anemoi.models.interface import AnemoiModelInterface
+from anemoi.training.losses.combined import CombinedLoss, RandomlySelectedLoss
 from anemoi.training.losses.filtering import FilteringLossWrapper
 from anemoi.training.losses.utils import grad_scaler
 from anemoi.training.losses.weightedloss import BaseWeightedLoss
 from anemoi.training.utils.jsonify import map_config_to_primitives
-from anemoi.training.utils.masks import Boolean1DMask
-from anemoi.training.utils.masks import NoOutputMask
+from anemoi.training.utils.masks import Boolean1DMask, NoOutputMask
+from anemoi.utils.config import DotDict
 
 LOGGER = logging.getLogger(__name__)
 
@@ -236,6 +232,14 @@ class GraphForecaster(pl.LightningModule):
             losses = [self.get_loss_function(loss, **loss_kwargs) for loss in config.losses]
             return instantiate({"_target_": config._target_}, losses=losses, loss_weights=config.loss_weights, **kwargs)
 
+        if config.get("_target_") == full_name(RandomlySelectedLoss):
+            loss_kwargs = kwargs.copy()
+            if config.get("ignore_nans", False):
+                loss_kwargs["ignore_nans"] = True
+
+            losses = [self.get_loss_function(loss, **loss_kwargs) for loss in config.losses]
+            return instantiate({"_target_": config._target_}, losses=losses, **kwargs)
+
         if config.get("_target_") == full_name(FilteringLossWrapper):
             loss = self.get_loss_function(config.loss, filter_wrap=False, **kwargs)
             config._content.pop("loss")
@@ -256,7 +260,7 @@ class GraphForecaster(pl.LightningModule):
             time_weights = instantiate(config.time_weights)
             time_weights = time_weights.weights(self.relative_date_indices)
             kwargs["time_weights"] = time_weights
-        
+
         if config.get("x_dim", None) is not None and config.get("y_dim", None) is not None:
             kwargs["x_dim"] = config.x_dim
             kwargs["y_dim"] = config.y_dim
@@ -495,7 +499,7 @@ class GraphForecaster(pl.LightningModule):
             # prediction at rollout step rollout_step, shape = (bs, latlon, nvar)
             y_pred = self(x)
 
-            y = batch[:, self.multi_step + rollout_step, ..., self.data_indices.internal_data.output.full]
+            y = batch[:, self.multi_step + rollout_step, ...]
             # y includes the auxiliary variables, so we must leave those out when computing the loss
             loss = checkpoint(self.loss, y_pred, y, use_reentrant=False) if training_mode else None
 
@@ -533,7 +537,7 @@ class GraphForecaster(pl.LightningModule):
             metrics.update(metrics_next)
             y_preds.extend(y_preds_next)
 
-        loss *= 1.0 / self.rollout
+        #loss *= 1.0 / self.rollout
         return loss, metrics, y_preds
 
     def allgather_batch(self, batch: torch.Tensor) -> torch.Tensor:

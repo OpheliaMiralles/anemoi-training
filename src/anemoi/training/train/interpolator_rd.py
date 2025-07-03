@@ -72,14 +72,7 @@ class GraphInterpolator(GraphForecaster):
         boundary_times = config.training.explicit_times.input
         self.boundary_times = [t + self.multi_step - 1 for t in boundary_times]
         interp_times = config.training.explicit_times.target
-        self.interp_times = [t + self.multi_step - 1 for t in interp_times]
-        sorted_indices = sorted(
-            set(range(self.multi_step)).union(
-                self.boundary_times,
-                self.interp_times,
-            ),
-        )
-        self.imap = {data_index: batch_index for batch_index, data_index in enumerate(sorted_indices)}
+        
 
     def _step(
         self,
@@ -92,9 +85,21 @@ class GraphInterpolator(GraphForecaster):
         loss = torch.zeros(1, dtype=batch.dtype, device=self.device, requires_grad=False)
         metrics = {}
         y_preds = []
+        interp_times = list(range(self.multi_step, self.boundary_times[-1]))
+        probs = torch.exp(-0.07 * torch.tensor(interp_times))
+        probs = probs / probs.sum()
+        rd_interp_indices = torch.distributions.Categorical(probs).sample([6])
+        rd_interp_times = sorted(torch.tensor(interp_times)[rd_interp_indices].tolist())
+        sorted_indices = sorted(
+            set(range(self.multi_step)).union(
+                self.boundary_times,
+                rd_interp_times,
+            ),
+        )
+        imap = {data_index: batch_index for batch_index, data_index in enumerate(sorted_indices)}
 
         batch = self.model.pre_processors(batch)
-        present, future = itemgetter(*self.boundary_times)(self.imap)
+        present, future = itemgetter(*self.boundary_times)(imap)
         obs = set([var.item() for var in self.data_indices.data.input.full]).difference(
             set(self.known_future_variables)
         )
@@ -121,9 +126,9 @@ class GraphInterpolator(GraphForecaster):
             if time_weights is not None:
                 time_weights = time_weights.detach().clone()
             original_weights = {self.loss: self.loss.loss.time_weights}
-        for interp_step in self.interp_times:
+        for interp_step in rd_interp_times:
             if time_weights is not None:
-                updated_time_weights = time_weights[self.imap[interp_step]].detach().clone()
+                updated_time_weights = time_weights[imap[interp_step]].detach().clone()
             else:
                 updated_time_weights = None
             # update time weights in loss function for this specific case
@@ -131,12 +136,12 @@ class GraphInterpolator(GraphForecaster):
                 specific_loss.loss.time_weights = updated_time_weights
             # get the forcing information for the target interpolation time:
             target_forcing[..., : len(self.known_future_variables)] = batch[
-                :, self.imap[interp_step], :, :, self.known_future_variables
+                :, imap[interp_step], :, :, self.known_future_variables
             ]
             target_forcing[..., -1] = (interp_step - future) / (future - present)
             x_with_intermediate_forcings = torch.cat([x_bound, target_forcing], dim=-1).unsqueeze(dim=1)
             y_pred = self(x_with_intermediate_forcings)
-            y = batch[:, self.imap[interp_step], ...]
+            y = batch[:, imap[interp_step], ...]
             loss += checkpoint(self.loss, y_pred, y, use_reentrant=False)
 
             metrics_next = {}
@@ -149,7 +154,7 @@ class GraphInterpolator(GraphForecaster):
             metrics.update(metrics_next)
             y_preds.extend(y_pred)
 
-        loss *= 1.0 / len(self.interp_times)
+        loss *= 1.0 / len(rd_interp_times)
 
         for specific_loss in original_weights:
             specific_loss.loss.time_weights = original_weights[specific_loss]

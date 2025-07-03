@@ -15,6 +15,7 @@ from typing import Any
 from typing import Callable
 
 import torch
+from torch.nn.modules import Module
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -131,3 +132,13 @@ class CombinedLoss(torch.nn.Module):
             return [getattr(loss, name)(*args, **kwargs) for loss in self.losses]
 
         return hidden_func
+
+
+class RandomlySelectedLoss(CombinedLoss):
+    def __init__(self, losses: functools.Sequence[Module], **kwargs):
+        p = torch.tensor([1 / len(losses)]*len(losses))
+        distri = torch.distributions.Categorical(p)
+        w = distri.sample()
+        w_array = torch.zeros(len(losses))
+        w_array[w] = 1
+        super().__init__(losses=losses, loss_weights=(w_array.cpu().numpy()), **kwargs)
